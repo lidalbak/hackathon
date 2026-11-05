@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import socket
+import threading
 from datetime import datetime
 
 from stay_agent.channels import StaticBookings, channels_from_settings, create_replica_stay
@@ -35,10 +36,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
     harness = StayHarness(settings, Writer(settings), bookings, guest, owner, cleaning, executor=Worker())
     server = make_server(harness, args.port)
     print(f"stay-agent listening on port {args.port}")
-    print(f"Device server URL for this laptop: http://{lan_ip()}:{args.port}")
     print(f"Claude: {'on, ' + settings.model if settings.use_claude else 'off (templates)'}")
     try:
-        server.serve_forever()
+        if args.usb:
+            from stay_agent.usb import run_usb
+
+            print("Device: over USB (close `atech monitor` first)")
+            threading.Thread(target=server.serve_forever, name="stay-agent-http", daemon=True).start()
+            run_usb(harness, args.usb_port)
+        else:
+            print(f"Device server URL for this laptop: http://{lan_ip()}:{args.port}")
+            server.serve_forever()
     except KeyboardInterrupt:
         pass
     return 0
@@ -104,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config", help="settings JSON (see config.example.json)")
     p.add_argument("--port", type=int, default=DEFAULT_PORT)
     p.add_argument("--no-claude", action="store_true", help="templates only, no API calls")
+    p.add_argument("--usb", action="store_true", help="talk to the device over USB instead of waiting for Wi-Fi posts")
+    p.add_argument("--usb-port", help="serial port, if several boards are plugged in")
     p.set_defaults(fn=cmd_serve)
 
     p = sub.add_parser("simulate", help="run a whole stay in seconds, without the device")

@@ -16,10 +16,10 @@ code:
     #include <WiFi.h>
     #include <WiFiClientSecure.h>
 
-    // The device measures and shows; the agent decides. Every 5 s it POSTs its
-    // readings to the agent over Wi-Fi and shows what the agent answers. The
-    // agent runs on a laptop for the demo and in the cloud in production: only
-    // the server URL changes. USB is for power (and one-time setup) only.
+    // The device measures and shows; the agent decides. Every 5 s it sends its
+    // readings to the agent and shows what the agent answers. Two ways, same data:
+    //  - Wi-Fi: POST to the agent's server (laptop or cloud; only the URL changes)
+    //  - USB: an `env` event; the agent answers with the `status_set` action
     //
     // Privacy: the microphone is only ever read as a sound LEVEL. No audio
     // samples leave this file (Airbnb allows decibel monitors, not recorders).
@@ -110,6 +110,8 @@ code:
     }
 
     // ---- What the agent tells us -------------------------------------------
+    const uint32_t USB_AGENT_FRESH_MS = 30000;  // the agent answers every 5 s over USB
+    uint32_t lastUsbAgent = 0;                  // millis() of its last status_set over USB
     enum Level { LV_OK, LV_WATCH, LV_ALERT };
     Level level = LV_OK;
     String statusText = "Waiting for the agent...";
@@ -258,10 +260,14 @@ code:
       screen.print(unit);
     }
 
+    bool agentReachable() {
+      return netState == NET_OK || (lastUsbAgent && millis() - lastUsbAgent < USB_AGENT_FRESH_MS);
+    }
+
     // What the bottom line says when the agent can't be reached
     String netProblem() {
       switch (netState) {
-        case NET_UNSET:   return "Not set up: send net_set over USB";
+        case NET_UNSET:   return "Waiting for the agent (USB or Wi-Fi)";
         case NET_JOINING: return "Joining Wi-Fi " + wifiSsid + "...";
         case NET_FAIL:
           if (WiFi.status() != WL_CONNECTED) return "Wi-Fi " + wifiSsid + " not reachable";
@@ -317,7 +323,8 @@ code:
 
       // Bottom line: the agent's last action, or why it can't be reached.
       // Scrolls when too long.
-      String text = netState == NET_OK ? statusText : netProblem();
+      bool reachable = agentReachable();
+      String text = reachable ? statusText : netProblem();
       const int cols = W / 6 - 1;
       String line = text;
       if ((int)line.length() > cols) {
@@ -327,7 +334,7 @@ code:
       }
       screen.drawLine(0, 66, W, 66, ATECH_PANEL);
       screen.setTextSize(1);
-      screen.setTextColor(netState == NET_OK ? ATECH_FG : ATECH_WARN);
+      screen.setTextColor(reachable ? ATECH_FG : ATECH_WARN);
       screen.setCursor(3, 70);
       screen.print(line.c_str());
 
@@ -370,8 +377,9 @@ code:
       atechDone();
     }
     if (atech_action == "status_set" || atech_action == "stay_set") {
-      // Same JSON the agent answers with; lets you drive the screen by hand
+      // The agent over USB, or you by hand: same JSON as the answer to a Wi-Fi POST
       if (!applyAgentJson(atech_value)) atechFail("value must be a JSON object");
+      else lastUsbAgent = millis();
       atechDone();
     }
     if (atech_action == "tamper_arm") {
@@ -409,7 +417,12 @@ code:
       e5 += (double)r * r; n5++;
       max5 = max(max5, rmsToDb(r));
     }
-    if (envTimer.ready(5000) && n5) {
+    // Tamper or hands-off changed: send a reading at once, on USB too (Wi-Fi has postNow)
+    static bool wasTilted = false, wasNear = false;
+    bool envNow = tilted != wasTilted || handNear != wasNear;
+    wasTilted = tilted;
+    wasNear = handNear;
+    if ((envTimer.ready(5000) || envNow) && n5) {
       lastDb = rmsToDb(sqrt(e5 / n5));
       lastPeak = max5;
       e5 = 0; n5 = 0; max5 = 0;

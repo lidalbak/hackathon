@@ -48,6 +48,14 @@ Settings are stored in the device's flash, never in this repo. It reboots and jo
 Until it reaches the agent, the bottom line of the screen says why: not set up,
 joining Wi-Fi, Wi-Fi not reachable, or the agent's HTTP error.
 
+## Over USB instead of Wi-Fi
+
+The same readings come as an `env` event every 5 s, and at once when `tampered` or
+`near` changes. The agent answers with `status_set` (same JSON as the Wi-Fi reply);
+the screen shows the agent's text while it hears from it at least every 30 s.
+`stay-agent serve --usb` does this. To stop the device trying Wi-Fi:
+`atech send net_set '{"ssid": "", "server": ""}'`.
+
 ## USB actions (setup and debugging)
 
 | Key | Value | Effect |

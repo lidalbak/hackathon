@@ -44,7 +44,20 @@ stay-agent simulate quiet --no-claude
 Each run prints the guest messages, owner alerts, the cleaning order, the stay report
 and the review draft, and writes the report to `reports/<booking-id>.json`.
 
-## Demo with the device and the Airbnb copy
+## Demo over USB (simplest)
+
+```bash
+python -m airbnb_chat                                    # http://127.0.0.1:8766/hosting/messages
+cd stay_agent
+stay-agent replica-stay --config config.demo.json --guest Anna
+stay-agent serve --config config.demo.json --usb         # board on USB-C; close `atech monitor` first
+```
+
+The board sends its readings over USB and shows the agent's answers. `config.demo.json`
+triggers on noise above 90 dB for 3 s (readings come every 5 s, so allow a few seconds),
+and a moved or touched board is reported at once.
+
+## Demo with the device on Wi-Fi and the Airbnb copy
 
 Guests are messaged in the Airbnb copy on main ([`airbnb_chat/`](../airbnb_chat),
 API in [docs/airbnb-chat.md](../docs/airbnb-chat.md)): the agent reads confirmed stays

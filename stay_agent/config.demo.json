@@ -6,7 +6,7 @@
   "replica_token": "",
   "listing_title": "Bright studio in Grünerløkka",
   "check_in_time": "00:00",
-  "limits": {"noise_db": 72, "quiet_noise_db": 72, "noise_minutes": 0.5, "clear_minutes": 0.5,
+  "limits": {"noise_db": 90, "quiet_noise_db": 90, "noise_minutes": 0.05, "clear_minutes": 0.5,
              "temp_minutes": 0.5, "humidity_minutes": 0.5, "offline_seconds": 30},
   "policy": {"reminder_minutes": 0.5, "escalate_after": 3, "escalate_window_minutes": 10}
 }
