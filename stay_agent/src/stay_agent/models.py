@@ -25,6 +25,7 @@ class Reading(BaseModel):
     moving: bool = False
     tampered: bool = False
     angle: float = 0  # degrees away from where the unit was placed
+    near: bool = False  # something within 10 cm: the device shows DO NOT TOUCH
 
     @field_validator("temp")
     @classmethod

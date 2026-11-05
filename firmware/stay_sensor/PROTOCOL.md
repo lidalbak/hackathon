@@ -11,7 +11,7 @@ Header `X-Device-Token: <token>` (the agent rejects other tokens when it has one
 
 ```json
 {"device_id": "oslo-1", "temp": 21.4, "hum": 43.0, "db": 48.2, "db_max": 61.0,
- "moving": 0, "tampered": 0, "angle": 3, "uptime_s": 5120}
+ "moving": 0, "tampered": 0, "angle": 3, "near": 0, "uptime_s": 5120}
 ```
 
 | Field | Meaning |
@@ -20,10 +20,11 @@ Header `X-Device-Token: <token>` (the agent rejects other tokens when it has one
 | `db` | sound level, 5 s energy average. Approximate (datasheet calibration) |
 | `db_max` | loudest 50 ms of those 5 s |
 | `moving` | 1 while the unit is being picked up, bumped or rotated |
-| `tampered` | 1 once it has been turned more than 20° from where it was placed, for 2 s; 0 again once it is back within 10° |
+| `tampered` | 1 once it has been turned more than 20° from where it was placed, for 0.7 s; 0 again once it is back within 10° and still |
+| `near` | 1 while something is within 10 cm of the distance sensor (port 6); the screen then flashes DO NOT TOUCH |
 | `angle` | degrees away from the placed position |
 
-Posts every ~5 s, and at once when `tampered` changes. The microphone is only read as a
+Posts every ~5 s, and at once when `tampered` changes or something comes within 10 cm. The microphone is only read as a
 sound level: no audio is recorded or sent. There is no CO2 sensor.
 
 ## Agent → device: the response body

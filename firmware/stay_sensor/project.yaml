@@ -6,6 +6,7 @@ modules:
   - {id: neopixel,   instance: light,  port: 2}
   - {id: microphone, instance: mic,    ports: [3, 4]}
   - {id: icm40608,   instance: imu,    port: 5}
+  - {id: distance_sensor, instance: dist, port: 6}
   - {id: st7735_tft, instance: screen, ports: [13, 14]}
 code:
   globals: |
@@ -35,7 +36,9 @@ code:
 
     // ---- Tamper: picked up, moved, or turned away from where the host put it --
     // The gravity direction a few seconds after boot (or at `tamper_arm`) is the
-    // baseline; turning more than 20 degrees from it for 2 s counts as moved.
+    // baseline; turning more than 20 degrees from it for 0.7 s counts as moved.
+    const uint32_t TILT_HOLD_MS = 700;  // ignores a bump, catches a real turn within a second
+    const uint32_t STILL_MS = 1500;     // no jolt or rotation for this long = not moving
     float baseX = 0, baseY = 0, baseZ = 1;
     float gravX = 0, gravY = 0, gravZ = 1;  // low-passed accelerometer
     bool armed = false, tilted = false, moving = false;
@@ -54,6 +57,11 @@ code:
       armed = true;
       tilted = false;
     }
+
+    // ---- Hands off: the distance sensor sees something within 10 cm -----------
+    const int NEAR_MM = 100;   // closer than this shows DO NOT TOUCH
+    const int CLEAR_MM = 150;  // and it goes away beyond this (no flicker at the edge)
+    bool handNear = false;
 
     // ---- What the agent tells us -------------------------------------------
     enum Level { LV_OK, LV_WATCH, LV_ALERT };
@@ -88,7 +96,7 @@ code:
 
     struct Snapshot {
       float temp = -99, hum = -1, db = 0, dbMax = 0, angle = 0;
-      bool moving = false, tampered = false;
+      bool moving = false, tampered = false, near = false;
     };
     SemaphoreHandle_t netLock;
     Snapshot snap;              // written by loop, read by the net task
@@ -115,9 +123,9 @@ code:
       char buf[256];
       snprintf(buf, sizeof(buf),
                "{\"device_id\":\"%s\",\"temp\":%.2f,\"hum\":%.1f,\"db\":%.1f,\"db_max\":%.1f,"
-               "\"moving\":%d,\"tampered\":%d,\"angle\":%.0f,\"uptime_s\":%lu}",
+               "\"moving\":%d,\"tampered\":%d,\"angle\":%.0f,\"near\":%d,\"uptime_s\":%lu}",
                deviceId.c_str(), s.temp, s.hum, s.db, s.dbMax, s.moving ? 1 : 0,
-               s.tampered ? 1 : 0, s.angle, (unsigned long)(millis() / 1000));
+               s.tampered ? 1 : 0, s.angle, s.near ? 1 : 0, (unsigned long)(millis() / 1000));
       return String(buf);
     }
 
@@ -216,7 +224,22 @@ code:
       }
     }
 
+    void drawHandsOff() {
+      const int W = screen.width();
+      bool flash = (millis() / 300) % 2;
+      screen.fillScreen(flash ? ATECH_ALERT : ATECH_BG);
+      screen.setFont(nullptr);
+      screen.setTextColor(flash ? ATECH_BG : ATECH_ALERT);
+      screen.setTextSize(3);  // 18x24 px per char: "DO NOT" and "TOUCH!" are 108 px wide
+      screen.setCursor((W - screen.textWidth("DO NOT")) / 2, 10);
+      screen.print("DO NOT");
+      screen.setCursor((W - screen.textWidth("TOUCH!")) / 2, 40);
+      screen.print("TOUCH!");
+      screen.display();
+    }
+
     void drawScreen(float db, float peakDb) {
+      if (handNear) { drawHandsOff(); return; }
       const int W = screen.width();
       char buf[32];
       screen.clear();
@@ -272,7 +295,7 @@ code:
     loadNetSettings();
     xTaskCreatePinnedToCore(netTask, "net", 16384, nullptr, 1, nullptr, 0);
   loop: |
-    static EveryTimer sampleTimer, envTimer, ledTimer, drawTimer, imuTimer;
+    static EveryTimer sampleTimer, envTimer, ledTimer, drawTimer, imuTimer, distTimer;
     static uint32_t lastMotion = 0, tiltSince = 0, restartAt = 0;
     // Noise: energy-average the mic level over 5 s
     static double e5 = 0;
@@ -346,6 +369,7 @@ code:
       snap.moving = moving;
       snap.tampered = tilted;
       snap.angle = tiltFromBase;
+      snap.near = handNear;
       snapFresh = true;
       xSemaphoreGive(netLock);
       // Same reading over USB, for `atech monitor` while debugging
@@ -368,7 +392,7 @@ code:
       if (accDev > 0.12f || spin > 25.0f) {
         lastMotion = millis();
         moving = true;
-      } else if (moving && millis() - lastMotion > 3000) {
+      } else if (moving && millis() - lastMotion > STILL_MS) {
         moving = false;
       }
 
@@ -379,7 +403,7 @@ code:
         tiltFromBase = angleFromBase();
         if (!tilted && tiltFromBase > 20.0f) {
           if (!tiltSince) tiltSince = millis();
-          if (millis() - tiltSince > 2000) { tilted = true; snap.tampered = true; postNow = true; }
+          if (millis() - tiltSince > TILT_HOLD_MS) { tilted = true; snap.tampered = true; postNow = true; }
         } else if (tiltFromBase <= 20.0f) {
           tiltSince = 0;
         }
@@ -387,14 +411,28 @@ code:
       }
     }
 
-    // ---- Light: the agent's status, alert breathes; MOVED overrides ----
+    // ---- Hands off ----
+    if (distTimer.ready(50) && dist_ok && dist.isReady()) {
+      int md = dist.getMinDistance();  // 32767: nothing in range
+      if (!handNear && md > 0 && md < NEAR_MM) {
+        handNear = true;
+        snap.near = true;
+        postNow = true;  // let the agent know straight away
+      } else if (handNear && (md <= 0 || md > CLEAR_MM)) {
+        handNear = false;
+        snap.near = false;
+      }
+    }
+
+    // ---- Light: the agent's status, alert breathes; MOVED and hands off override ----
     if (ledTimer.ready(30)) {
       float k = (level == LV_ALERT || tilted) ? 0.35f + 0.65f * (0.5f + 0.5f * sinf(millis() / 220.0f)) : 1.0f;
-      if (tilted)                 light.setAll(255 * k, 0, 0);
+      if (handNear)               light.setAll((millis() / 300) % 2 ? 255 : 0, 0, 0);
+      else if (tilted)            light.setAll(255 * k, 0, 0);
       else if (level == LV_OK)    light.setAll(0, 255 * k, 40 * k);
       else if (level == LV_WATCH) light.setAll(255 * k, 120 * k, 0);
       else                        light.setAll(255 * k, 0, 0);
       light.show();
     }
 
-    if (drawTimer.ready(250)) drawScreen(lastDb, lastPeak);
+    if (drawTimer.ready(handNear ? 100 : 250)) drawScreen(lastDb, lastPeak);
