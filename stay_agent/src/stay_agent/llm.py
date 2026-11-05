@@ -45,8 +45,9 @@ temperature, humidity, or the sensor being moved). Write as the host yourself, i
 first person, like a friendly person texting, not a company.
 
 - First message about an issue: warm, polite, assume good faith.
-- Reminders: firmer but still respectful. From the third message on, say that you will
-  have to step in (call or come by) if it continues.
+- Later messages: firmer but still respectful.
+- final_warning true: this is the last warning. Say plainly that this is the second
+  (or later) time and that you are stepping in now: you will call or come by.
 - Use only the facts given. Never invent numbers, and never claim more than the facts
   show (a loud room is not proof of a party). Don't explain how the sensor works.
 - Write in the language given. No subject line, no placeholders. 2-4 short sentences.
@@ -116,7 +117,9 @@ class Writer:
 
     # ---- To the guest ---------------------------------------------------------------
 
-    def guest_message(self, booking: Booking, incident: Incident, history: list[SentMessage]) -> tuple[str, Author]:
+    def guest_message(
+        self, booking: Booking, incident: Incident, history: list[SentMessage], final_warning: bool = False
+    ) -> tuple[str, Author]:
         s = self.settings
         attempt = incident.messages_sent + 1
         earlier = [m.text for m in history if m.to == "guest" and m.kind == incident.kind][-2:]
@@ -133,11 +136,12 @@ class Writer:
             since=_hm(incident.started),
             message_number_about_this_issue=attempt,
             earlier_messages_about_it=earlier,
+            final_warning=final_warning,
         )
         out = self._run(self._guest, prompt)
         if out is not None:
             return out.text, "claude"
-        return _guest_template(s, booking, incident, attempt), "template"
+        return _guest_template(s, booking, incident, attempt, final_warning), "template"
 
     def guest_reply(
         self, guest_name: str, stay: dict, transcript: list[str], sensor_now: Optional[dict]
@@ -234,8 +238,11 @@ def _incident_line(i: Incident) -> str:
     return f"{i.kind.value} from {_hm(i.started, True)} {end}: {i.detail}{extra}"
 
 
-def _guest_template(s: Settings, b: Booking, i: Incident, attempt: int) -> str:
+def _guest_template(s: Settings, b: Booking, i: Incident, attempt: int, final: bool = False) -> str:
     sign = f"– {s.owner_name}"
+    if final:
+        what = "the noise" if i.kind == IncidentKind.NOISE else LABEL_TEXT.get(i.kind, "this")
+        return f"Hi {b.guest_name}, this is the second time {what} has been a problem, so I'm stepping in: I'll call you now. {sign}"
     if i.kind == IncidentKind.NOISE:
         if attempt >= 3:
             body = "the noise is still high. Please turn it down now; if it continues, I'll have to call or come by."
@@ -255,6 +262,14 @@ def _guest_template(s: Settings, b: Booking, i: Incident, attempt: int) -> str:
     else:
         body = "we noticed something in the apartment and wanted to check that everything is fine."
     return f"Hi {b.guest_name}, {body} {sign}"
+
+
+LABEL_TEXT = {
+    IncidentKind.TEMP_HIGH: "the heat",
+    IncidentKind.TEMP_LOW: "the cold",
+    IncidentKind.HUMIDITY: "the humidity",
+    IncidentKind.TAMPER: "the moved sensor",
+}
 
 
 def _narrative_template(stats: StayStats, incidents: list[Incident]) -> StayNarrative:

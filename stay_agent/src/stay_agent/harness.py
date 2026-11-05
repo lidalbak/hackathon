@@ -80,7 +80,7 @@ class StayLog:
     booking: Optional[Booking]
     incidents: list[Incident] = field(default_factory=list)
     messages: list[SentMessage] = field(default_factory=list)
-    guest_message_times: list[datetime] = field(default_factory=list)
+    guest_messages: list[tuple[datetime, IncidentKind]] = field(default_factory=list)  # warnings sent
     owner_alert_times: list[datetime] = field(default_factory=list)
     readings: int = 0
     _db_sum: float = 0
@@ -116,7 +116,7 @@ class StayLog:
             max_temp=r1(self.max_temp),
             max_humidity=r1(self.max_hum),
             incidents=kinds,
-            guest_messages=len(self.guest_message_times),
+            guest_messages=len(self.guest_messages),
             owner_alerts=len(self.owner_alert_times),
             tamper_events=kinds.get(IncidentKind.TAMPER.value, 0),
         )
@@ -160,7 +160,7 @@ class StayHarness:
             self.log.add(r, self.detector.quiet(r.at))
             for change in self.detector.feed(r):
                 self._on_change(change, r.at)
-            self._remind(r.at)
+            self._remind(r)
             self._update_reply()
             return self.reply.model_copy()
 
@@ -297,48 +297,53 @@ class StayHarness:
             self._alert_owner(f"{LABELS[inc.kind]} with no guest booked", now, escalate=[inc])
             return
         self._message_guest(inc, now)
-        if inc.kind == IncidentKind.TAMPER and self.settings.policy.escalate_tamper:
+        alerted_now = bool(self.log.owner_alert_times) and self.log.owner_alert_times[-1] == now
+        if inc.kind == IncidentKind.TAMPER and self.settings.policy.escalate_tamper and not alerted_now:
             self._alert_owner("the sensor was moved during a stay", now, escalate=[inc])
 
-    def _remind(self, now: datetime) -> None:
+    def _remind(self, r: Reading) -> None:
         """Noise that goes on after a message gets a reminder every ``reminder_minutes``,
-        until the owner has been contacted: from then on it's the owner's call."""
+        until the owner has been contacted: from then on it's the owner's call. Only
+        while it is loud right now, never in a quiet spell before the incident ends."""
         inc = self.detector.active.get(IncidentKind.NOISE)
         if inc is None or self.log.booking is None or inc.last_message_at is None or inc.escalated:
             return
         gap = timedelta(minutes=self.settings.policy.reminder_minutes)
-        if self.detector.breaching(IncidentKind.NOISE) and now - inc.last_message_at >= gap:
-            self._message_guest(inc, now)
+        if r.db > self.detector.noise_limit(r.at) and r.at - inc.last_message_at >= gap:
+            self._message_guest(inc, r.at)
 
     def _message_guest(self, inc: Incident, now: datetime) -> None:
+        """Warn the guest. Warnings are counted over the whole escalation window, across
+        episodes: noise that comes back after a quiet spell gets the second warning, not
+        a new first one. The warning that reaches ``escalate_after`` is the final one,
+        and it also alerts the owner."""
         b = self.log.booking
         assert b is not None
         stay = self.log
-        snapshot = inc.model_copy()  # messages_sent as it was: the writer numbers this one +1
+        p = self.settings.policy
+        since = now - timedelta(minutes=p.escalate_window_minutes)
+        same_kind = sum(1 for t, k in stay.guest_messages if k == inc.kind and t >= since)
+        count = sum(1 for t, _ in stay.guest_messages if t >= since) + 1  # including this one
+        already = any(t >= since for t in stay.owner_alert_times)
+        final = count >= p.escalate_after and not already
+        snapshot = inc.model_copy(update={"messages_sent": same_kind})  # the writer numbers this one +1
         inc.messages_sent += 1
         inc.last_message_at = now
-        stay.guest_message_times.append(now)
+        stay.guest_messages.append((now, inc.kind))
         self._action = f"Sent {b.guest_name} a note about {LABELS[inc.kind]}"
 
         def job() -> None:
             with self.lock:
                 history = list(stay.messages)
-            text, author = self.writer.guest_message(b, snapshot, history)
+            text, author = self.writer.guest_message(b, snapshot, history, final_warning=final)
             self.guest.send(b, text)
             with self.lock:
                 stay.messages.append(SentMessage(at=now, to="guest", kind=inc.kind, text=text, written_by=author))
 
         self.executor.submit(job)
-        self._maybe_escalate(now)
-
-    def _maybe_escalate(self, now: datetime) -> None:
-        p = self.settings.policy
-        since = now - timedelta(minutes=p.escalate_window_minutes)
-        recent = [t for t in self.log.guest_message_times if t >= since]
-        already = any(t >= since for t in self.log.owner_alert_times)
-        if len(recent) >= p.escalate_after and not already:
+        if final:
             self._alert_owner(
-                f"{len(recent)} messages to the guest in {p.escalate_window_minutes:g} min and it continues",
+                f"{count} warnings to the guest in {p.escalate_window_minutes:g} min",
                 now,
                 escalate=list(self.detector.active.values()),
             )

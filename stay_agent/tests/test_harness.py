@@ -70,3 +70,26 @@ def test_model_output_is_used_and_bad_output_falls_back_to_templates(tmp_path):
     report = harness.reports[booking.id]
     assert report.written_by == "template"
     assert [m.written_by for m in report.messages if m.to == "guest"] == ["claude"] * 3
+
+
+def test_demo_second_loud_spell_is_the_final_warning_and_alerts_the_owner(tmp_path):
+    # demo policy: 90 dB for 3 s, escalate on the second warning, even after a quiet spell
+    from datetime import timedelta
+
+    from stay_agent import Limits, Policy, Reading
+
+    settings = Settings(
+        use_claude=False, owner_name="Simen", reports_dir=str(tmp_path),
+        limits=Limits(noise_db=90, quiet_noise_db=90, noise_minutes=0.05, clear_minutes=0.5),
+        policy=Policy(reminder_minutes=0.5, escalate_after=2, escalate_window_minutes=10),
+    )
+    booking = demo_booking(settings.tz, datetime(2026, 11, 5).date())
+    rec = Recorder()
+    harness = StayHarness(settings, Writer(settings), StaticBookings([booking], settings.tz), rec, rec, rec, Inline())
+    t = booking.check_in + timedelta(hours=3)
+    replies = []
+    for i, db in enumerate([60] * 4 + [95] * 2 + [60] * 12 + [95] * 2):  # loud, a minute quiet, loud again
+        replies.append(harness.ingest(Reading(at=t + timedelta(seconds=5 * i), db=db, db_max=db + 5, temp=21, hum=40)))
+    assert len(rec.guest) == 2 and len(rec.owner) == 1
+    assert "second time" in rec.guest[1] and "Simen" in rec.guest[1]
+    assert replies[-1].level == "alert"
