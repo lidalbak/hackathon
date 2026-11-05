@@ -243,9 +243,34 @@ code:
       Serial.println("\"}}");
     }
 
+    // Short debug views of a line, so they survive the USB link:
+    //   ble_keys   every "key": in the line, in order
+    //   ble_prompt 240 characters from "prompt" (or from "waiting" when there is no prompt)
+    //   ble_rx0..  the start of the line in 200-character pieces
+    static void debugViews(const String& line) {
+      if (!g_bleDebug) return;
+      String keys;
+      for (int i = line.indexOf('"'); i >= 0 && i < (int)line.length(); ) {
+        int end = line.indexOf('"', i + 1);
+        if (end < 0) break;
+        if (end + 1 < (int)line.length() && line[end + 1] == ':') {
+          if (keys.length()) keys += ",";
+          keys += line.substring(i + 1, end);
+        }
+        i = line.indexOf('"', end + 1);
+      }
+      debugLine("ble_keys", keys);
+      int at = line.indexOf("\"prompt\"");
+      if (at < 0) at = line.indexOf("\"waiting\"");
+      if (at >= 0) debugLine("ble_prompt", line.substring(at, at + 240));
+      for (int part = 0; part < 4 && part * 200 < (int)line.length(); part++) {
+        debugLine((String("ble_rx") + part).c_str(), line.substring(part * 200, part * 200 + 200));
+      }
+    }
+
     // One line from the app: a command, a heartbeat snapshot, or something we ignore.
     static void handleBuddyLine(const String& line) {
-      debugLine("ble_rx", line);
+      debugViews(line);
       if (line.indexOf("\"evt\":") >= 0 || line.indexOf("\"time\":") >= 0) return;
 
       String cmd = jStr(line, "cmd");
