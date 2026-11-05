@@ -1,0 +1,25 @@
+# Agent Controller, v0 firmware.
+#
+# v0 has no custom code on purpose: the PC bridge drives everything through the
+# actions the generated firmware already accepts (see docs/architecture.md):
+#   status_pixel / status_fill / status_clear     -> session lights on the 3x3 grid
+#   speaker_play_rtttl                            -> chirp when an agent needs you
+# and listens to the events it already sends:
+#   approve / deny (1 = press, 0 = release)       -> answer the selected request
+#   presence_min_distance (mm)                    -> wake the screen when you lean in
+#
+# ASSUMPTION: 14-port board. Run `atech view firmware/controller` and check every
+# module against the board in your hand before flashing.
+name: controller
+board: 14port
+feedback: false   # the bridge owns every output; no built-in demo behaviour
+
+modules:
+  - {id: st7735_tft,      instance: screen,   ports: [1, 2]}   # Small Kit
+  - {id: speaker,         instance: speaker,  ports: [3, 4]}   # add-on
+  - {id: microphone,      instance: mic,      ports: [5, 6]}   # add-on, push-to-talk later
+  - {id: button,          instance: approve,  port: 7}         # Small Kit
+  - {id: neopixel,        instance: status,   port: 9}         # Small Kit, one LED per session
+  - {id: button,          instance: deny,     port: 10}        # Small Kit
+  - {id: distance_sensor, instance: presence, port: 11}        # Small Kit
+  # Ports 13-14 are kept free for a rotary_encoder (scroll the request queue).
