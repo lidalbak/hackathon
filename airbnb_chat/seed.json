@@ -1,57 +1,47 @@
 {
-  "_comment": "Demo scenario loaded on first start and by POST /api/reset. You are 'Alex'. Conversations are marked read unless \"unread\": true. Dates are days from today, message times are minutes ago.",
+  "_comment": "Demo scenario loaded on first start and by POST /api/reset. You are 'Alex', the host in every conversation. Conversations are marked read unless \"unread\": true. Dates are days from today, message times are minutes ago.",
   "conversations": [
     {
-      "my_role": "host", "unread": true,
+      "my_role": "host",
       "guest": {"name": "Emma", "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=160&h=160&fit=crop&q=80"},
       "host": {"name": "Alex", "superhost": true},
-      "listing": {"title": "Bright studio in Grünerløkka", "location": "Oslo, Norway", "type": "Entire rental unit",
-                  "photo": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80"},
-      "reservation": {"status": "pending", "check_in": 14, "check_out": 17, "guests": 2, "total": "kr 4,860"},
+      "listing": {"title": "Cozy loft near Bryggen", "location": "Bergen, Norway", "type": "Entire loft",
+                  "photo": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=800&q=80"},
+      "reservation": {"status": "confirmed", "check_in": 0, "check_out": 3, "guests": 2, "code": "HM8VK2QX7D", "total": "kr 4,860"},
       "messages": [
-        {"sender": "system", "text": "Emma sent a request to book", "minutes_ago": 40},
-        {"sender": "guest", "text": "Hi Alex! My partner and I are coming to Oslo for a design conference at the Opera House. Your studio looks perfect.\n\nWould it be OK to drop our bags a bit before check-in?", "minutes_ago": 38}
-      ]
-    },
-    {
-      "my_role": "guest", "unread": true,
-      "host": {"name": "Ingrid", "superhost": true, "avatar": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=160&h=160&fit=crop&q=80"},
-      "guest": {"name": "Alex"},
-      "listing": {"title": "Fjord cabin with wood-fired sauna", "location": "Balestrand, Norway", "type": "Entire cabin",
-                  "photo": "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80"},
-      "reservation": {"status": "confirmed", "check_in": 21, "check_out": 25, "guests": 2, "code": "HMB7RT4JQX", "total": "kr 9,240"},
-      "messages": [
-        {"sender": "system", "text": "Reservation confirmed", "minutes_ago": 7300},
-        {"sender": "guest", "text": "Hi Ingrid! We're so excited for our trip. Is the sauna available year-round?", "minutes_ago": 7290},
-        {"sender": "host", "text": "Hi Alex! Yes – the sauna is wood-fired and works all year. I'll leave firewood by the door. Let me know roughly when you expect to arrive!", "minutes_ago": 5900},
-        {"sender": "guest", "text": "Amazing, thank you! Probably around 4 PM.", "minutes_ago": 5880},
-        {"sender": "host", "text": "Just a heads-up: the road up to the cabin can be icy in late November, so I'd recommend a car with winter tyres. 🚗❄️", "minutes_ago": 180}
+        {"sender": "system", "text": "Reservation confirmed", "minutes_ago": 8700},
+        {"sender": "guest", "text": "Hi Alex! We just arrived, the place is lovely 😊 What's the wifi password?", "minutes_ago": 24},
+        {"sender": "host", "text": "Welcome, Emma! The network is \"Bryggen-Loft\" and the password is bryggen2026. It's also on the card next to the router.", "minutes_ago": 20}
       ]
     },
     {
       "my_role": "host",
-      "guest": {"name": "Lukas", "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&h=160&fit=crop&q=80"},
+      "guest": {"name": "Sofie", "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&h=160&fit=crop&q=80"},
       "host": {"name": "Alex", "superhost": true},
-      "listing": {"title": "Bright studio in Grünerløkka", "location": "Oslo, Norway", "type": "Entire rental unit",
-                  "photo": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80"},
-      "reservation": {"status": "confirmed", "check_in": 2, "check_out": 5, "guests": 1, "code": "HM3KQ9X2TB", "total": "kr 4,120"},
+      "listing": {"title": "Fjord cabin with wood-fired sauna", "location": "Balestrand, Norway", "type": "Entire cabin",
+                  "photo": "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80"},
+      "reservation": {"status": "confirmed", "check_in": -2, "check_out": 1, "guests": 4, "code": "HMB7RT4JQX", "total": "kr 9,240"},
       "messages": [
-        {"sender": "system", "text": "Reservation confirmed", "minutes_ago": 4400},
-        {"sender": "guest", "text": "Hi! Is there parking close to the apartment?", "minutes_ago": 2950},
-        {"sender": "host", "text": "Hi Lukas! There's a public garage on Thorvald Meyers gate, about 3 minutes' walk away. Street parking is free on Sundays.", "minutes_ago": 2930},
-        {"sender": "guest", "text": "Perfect, thanks!", "minutes_ago": 2925}
+        {"sender": "system", "text": "Reservation confirmed", "minutes_ago": 20160},
+        {"sender": "guest", "text": "Hi Alex, we're four friends celebrating a birthday. Is it OK to use the sauna in the evening?", "minutes_ago": 20100},
+        {"sender": "host", "text": "Of course! The sauna can be used until 22:00. I'll leave firewood by the door. Happy birthday in advance! 🎉", "minutes_ago": 20040},
+        {"sender": "guest", "text": "We've arrived – it's so beautiful here!", "minutes_ago": 2700},
+        {"sender": "host", "text": "Hi Sofie, the neighbours called me about loud music after midnight. Please keep the noise down after 22:00 – quiet hours are part of the house rules. Thanks for understanding!", "minutes_ago": 40}
       ]
     },
     {
-      "my_role": "guest",
-      "host": {"name": "Sofie", "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&h=160&fit=crop&q=80"},
-      "guest": {"name": "Alex"},
-      "listing": {"title": "Design apartment near Nyhavn", "location": "Copenhagen, Denmark", "type": "Entire rental unit",
-                  "photo": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=800&q=80"},
-      "reservation": {"status": "inquiry", "check_in": 45, "check_out": 48, "guests": 3},
+      "my_role": "host",
+      "guest": {"name": "Marco", "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&h=160&fit=crop&q=80"},
+      "host": {"name": "Alex", "superhost": true},
+      "listing": {"title": "Modern apartment by Aker Brygge", "location": "Oslo, Norway", "type": "Entire rental unit",
+                  "photo": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80"},
+      "reservation": {"status": "confirmed", "check_in": -3, "check_out": 2, "guests": 3, "code": "HMX4P2KQ9T", "total": "kr 7,950"},
       "messages": [
-        {"sender": "guest", "text": "Hi Sofie, would it be possible to bring a travel crib for our baby?", "minutes_ago": 1500},
-        {"sender": "host", "text": "Hi! Of course – I actually have a travel crib in the apartment that you're welcome to use 😊", "minutes_ago": 1260}
+        {"sender": "system", "text": "Reservation confirmed", "minutes_ago": 30000},
+        {"sender": "guest", "text": "Ciao Alex! What time can we check in?", "minutes_ago": 5800},
+        {"sender": "host", "text": "Hi Marco! Check-in is from 15:00. The lockbox code is 4821 – it's on the left of the main door.", "minutes_ago": 5760},
+        {"sender": "guest", "text": "Grazie, we're in!", "minutes_ago": 4300},
+        {"sender": "host", "text": "Hi Marco, a neighbour let me know there was a lot of noise from the balcony late last night. Please remember that quiet hours start at 22:00 – sound carries a lot in this building. Thank you!", "minutes_ago": 180}
       ]
     },
     {
@@ -60,22 +50,39 @@
       "host": {"name": "Alex", "superhost": true},
       "listing": {"title": "Bright studio in Grünerløkka", "location": "Oslo, Norway", "type": "Entire rental unit",
                   "photo": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80"},
-      "reservation": {"status": "completed", "check_in": -12, "check_out": -9, "guests": 2, "code": "HMQ2W8ZP4C", "total": "kr 5,310"},
+      "reservation": {"status": "completed", "check_in": -3, "check_out": 0, "guests": 2, "code": "HMQ2W8ZP4C", "total": "kr 4,310"},
       "messages": [
-        {"sender": "guest", "text": "Thanks for a wonderful stay! We left the keys in the lockbox.", "minutes_ago": 12900},
-        {"sender": "host", "text": "Thank you Chloé, you were great guests – welcome back anytime!", "minutes_ago": 12850}
+        {"sender": "guest", "text": "Is there a supermarket close by?", "minutes_ago": 4200},
+        {"sender": "host", "text": "Yes – there's a Kiwi two blocks away on Markveien, open until 23:00.", "minutes_ago": 4180},
+        {"sender": "host", "text": "Hi Chloé! Just a reminder that checkout is at 11:00 tomorrow. Please leave the keys in the lockbox and start the dishwasher before you go. 🙏", "minutes_ago": 1080},
+        {"sender": "guest", "text": "Will do! Thanks for everything.", "minutes_ago": 1020},
+        {"sender": "host", "text": "Thank you, Chloé – you were great guests. Safe travels!", "minutes_ago": 480}
       ]
     },
     {
-      "my_role": "guest",
-      "host": {"name": "Marco", "superhost": true, "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&h=160&fit=crop&q=80"},
-      "guest": {"name": "Alex"},
-      "listing": {"title": "Sunny loft in Trastevere", "location": "Rome, Italy", "type": "Entire loft",
-                  "photo": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80"},
-      "reservation": {"status": "completed", "check_in": -60, "check_out": -55, "guests": 2, "code": "HMX4P2KQ9T", "total": "€ 640"},
+      "my_role": "host",
+      "guest": {"name": "Ingrid", "avatar": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=160&h=160&fit=crop&q=80"},
+      "host": {"name": "Alex", "superhost": true},
+      "listing": {"title": "Fjord cabin with wood-fired sauna", "location": "Balestrand, Norway", "type": "Entire cabin",
+                  "photo": "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80"},
+      "reservation": {"status": "pending", "check_in": 30, "check_out": 34, "guests": 3, "total": "kr 11,800"},
       "messages": [
-        {"sender": "guest", "text": "Thank you Marco, the loft was amazing! The restaurant tip was the highlight of our trip.", "minutes_ago": 79200},
-        {"sender": "host", "text": "Grazie Alex! It was a pleasure hosting you. Come back soon!", "minutes_ago": 79000}
+        {"sender": "system", "text": "Ingrid sent a request to book", "minutes_ago": 700},
+        {"sender": "guest", "text": "Hi Alex! Is the cabin suitable for a toddler? We'd love to come in December.", "minutes_ago": 690},
+        {"sender": "host", "text": "Hi Ingrid! Yes – there's a travel crib and a high chair, and a gate on the stairs. You'd be very welcome!", "minutes_ago": 600}
+      ]
+    },
+    {
+      "my_role": "host",
+      "guest": {"name": "Lukas", "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&h=160&fit=crop&q=80"},
+      "host": {"name": "Alex", "superhost": true},
+      "listing": {"title": "Modern apartment by Aker Brygge", "location": "Oslo, Norway", "type": "Entire rental unit",
+                  "photo": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80"},
+      "reservation": {"status": "confirmed", "check_in": 5, "check_out": 8, "guests": 1, "code": "HM3KQ9X2TB", "total": "kr 5,120"},
+      "messages": [
+        {"sender": "system", "text": "Reservation confirmed", "minutes_ago": 4400},
+        {"sender": "guest", "text": "Hi! I'm coming by car. Where can I park?", "minutes_ago": 2950},
+        {"sender": "host", "text": "Hi Lukas! There's a public garage under Aker Brygge, about 2 minutes' walk away (around 300 kr per day). Street parking nearby is limited, so I'd go for the garage.", "minutes_ago": 2930}
       ]
     }
   ]

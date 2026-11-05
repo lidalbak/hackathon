@@ -19,10 +19,11 @@ python -m airbnb_chat                     # http://127.0.0.1:8766  (--host, --po
 | Page | What it shows |
 | --- | --- |
 | `/guest/messages[/{id}]` | Traveler inbox |
-| `/hosting/messages[/{id}]` | Host inbox: host top bar, Accept/Decline on booking requests |
+| `/hosting/messages[/{id}]` | Host inbox (the default): host top bar, Accept/Decline on booking requests |
 
-The demo starts with six conversations from [`airbnb_chat/seed.json`](../airbnb_chat/seed.json). You are "Alex": host in
-three and guest in three. Seed dates are days from today, and message times are minutes ago. Data is stored in
+The demo starts with six conversations from [`airbnb_chat/seed.json`](../airbnb_chat/seed.json). You are "Alex", the
+host in all of them: guests asking for the wifi password and parking, and your follow-ups about noise and checkout.
+`/` opens the host inbox. Seed dates are days from today, and message times are minutes ago. Data is stored in
 `airbnb_chat/data/chat.db` (git-ignored). `POST /api/reset` reloads the seed.
 
 | Variable | Effect |
@@ -51,19 +52,19 @@ Every conversation belongs to the account owner. `my_role` is the owner's side i
 
 ```json
 {
-  "id": 2,
-  "my_role": "guest",
-  "guest": {"name": "Alex"},
-  "host": {"name": "Ingrid", "superhost": true, "avatar": "https://…"},
-  "listing": {"title": "Fjord cabin with wood-fired sauna", "location": "Balestrand, Norway",
-              "type": "Entire cabin", "photo": "https://…"},
-  "reservation": {"status": "confirmed", "check_in": "2026-11-26", "check_out": "2026-11-30",
-                  "guests": 2, "code": "HMB7RT4JQX", "total": "kr 9,240"},
-  "read": {"guest": 6, "host": 7},
-  "unread": 1,
+  "id": 1,
+  "my_role": "host",
+  "guest": {"name": "Emma", "avatar": "https://…"},
+  "host": {"name": "Alex", "superhost": true},
+  "listing": {"title": "Bright studio in Grünerløkka", "location": "Oslo, Norway",
+              "type": "Entire rental unit", "photo": "https://…"},
+  "reservation": {"status": "confirmed", "check_in": "2026-11-05", "check_out": "2026-11-08",
+                  "guests": 2, "code": "HM8VK2QX7D", "total": "kr 4,860"},
+  "read": {"guest": 3, "host": 3},
+  "unread": 0,
   "typing": null,
-  "last_message": {"id": 7, "conversation_id": 2, "sender": "host", "text": "Just a heads-up: …",
-                   "created_at": "2026-11-05T14:04:57+00:00", "source": "seed"},
+  "last_message": {"id": 3, "conversation_id": 1, "sender": "host", "text": "Welcome, Emma! The network is …",
+                   "created_at": "2026-11-05T17:49:57+00:00", "source": "seed"},
   "created_at": "2026-11-05T17:04:57+00:00",
   "updated_at": "2026-11-05T17:04:57+00:00"
 }

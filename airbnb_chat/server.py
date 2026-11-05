@@ -152,7 +152,7 @@ async def page(request):
 
 async def root(request):
     query = f'?{request.url.query}' if request.url.query else ''
-    return RedirectResponse(f'/guest/messages{query}', 302)
+    return RedirectResponse(f'/hosting/messages{query}', 302)
 
 
 # ---- API --------------------------------------------------------------------

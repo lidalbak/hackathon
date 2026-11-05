@@ -38,9 +38,10 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(c.get('/hosting/messages').status_code, 200)
         convos = c.get('/api/conversations').json()['conversations']
         self.assertEqual(len(convos), 6)
-        self.assertEqual({x['my_role'] for x in convos}, {'guest', 'host'})
-        self.assertEqual(len(c.get('/api/conversations?role=host').json()['conversations']), 3)
-        self.assertEqual(sum(x['unread'] > 0 for x in convos), 2)
+        self.assertEqual({x['my_role'] for x in convos}, {'host'})
+        self.assertEqual(c.get('/api/conversations?role=guest').json()['conversations'], [])
+        self.assertTrue(all(x['last_message']['sender'] == 'host' and not x['unread'] for x in convos))
+        self.assertEqual(c.get('/', follow_redirects=False).headers['location'], '/hosting/messages')
 
     def test_write_and_read_messages(self):
         c = self.client
