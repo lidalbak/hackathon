@@ -16,7 +16,7 @@ Defined in [`firmware/controller/project.yaml`](../firmware/controller/project.y
 | 3–4 | Speaker (`speaker`) | `speaker` | Add-on | Chirp when an agent needs you |
 | 5–6 | Microphone (`microphone`) | `mic` | Add-on | Push-to-talk answers, later |
 | 7 | Button (`button`) | `approve` | Small Kit | Approve the selected request |
-| 9 | Light grid 3×3 (`neopixel`) | `status` | Small Kit | One LED per session, up to 9 |
+| 9 | Light grid 3×3 (`neopixel`) | `status` | Small Kit | One LED per session: 0–7 from the bridge, 8 for the Claude app |
 | 10 | Button (`button`) | `deny` | Small Kit | Deny the selected request |
 | 11 | free | | | |
 | 13–14 | free | | | Room for a knob (`rotary_encoder`) to scroll the queue |

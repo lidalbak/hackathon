@@ -1,56 +1,83 @@
-# Agent Controller, v0 firmware.
+# Agent Controller firmware.
 #
-# The PC bridge drives the board through actions and listens to its events.
-# Built in (generated from the modules below):
-#   status_pixel / status_fill / status_clear     -> session lights on the 3x3 grid
-#   speaker_play_rtttl                            -> chirp when an agent needs you
-#   approve / deny events (1 = press, 0 = release) -> answer the selected request
-# Our own, in code: below:
-#   show_session  {"agent","project","state","summary","pos","total"}
-#                 -> screen shows which agent, which project, its state and what it wants
-#   clear_session -> idle screen
+# Two sources feed the screen, and it shows whichever needs you most:
 #
-# Text must be ASCII: the screen font has no æøå, and the bridge folds it.
+# 1. The Claude desktop app, over Bluetooth (Hardware Buddy protocol,
+#    https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md).
+#    Covers Claude Code and Cowork sessions in the app. The app sends a snapshot
+#    of all sessions and any pending permission prompt; the buttons answer it.
+#    Needs Developer Mode in the app: Help > Troubleshooting > Enable Developer Mode,
+#    then Developer > Open Hardware Buddy... > Connect > pick "Claude-AC...".
+#
+# 2. The PC bridge, over USB (Codex and other agents). Actions:
+#      show_session  {"agent","project","state","summary","pos","total"}
+#      clear_session
+#      status_pixel / status_fill / status_clear  (light grid, slots 0-7)
+#      speaker_play_rtttl
+#    Events: approve / deny (1 = press, 0 = release).
+#
+# Light grid: slots 0-7 belong to the bridge, slot 8 (bottom right) shows the Claude app.
+# Text on the screen is ASCII only: the font has no æøå.
 #
 # Board: 14-port (confirmed). Run `atech view firmware/controller` and check every
 # module is in the port shown before flashing.
 name: controller
 board: 14port
-feedback: false   # the bridge owns every output; no built-in demo behaviour
+feedback: false   # the firmware owns every output; no built-in demo behaviour
 
 modules:
   - {id: st7735_tft,      instance: screen,   ports: [1, 2]}   # Small Kit
   - {id: speaker,         instance: speaker,  ports: [3, 4]}   # add-on
   - {id: microphone,      instance: mic,      ports: [5, 6]}   # add-on, push-to-talk later
   - {id: button,          instance: approve,  port: 7}         # Small Kit
-  - {id: neopixel,        instance: status,   port: 9}         # Small Kit, one LED per session
+  - {id: neopixel,        instance: status,   port: 9}         # Small Kit
   - {id: button,          instance: deny,     port: 10}        # Small Kit
   # Port 11 is free. Ports 13-14 are kept free for a rotary_encoder (scroll the request queue).
 
 code:
   globals: |
-    // What the screen shows. Set by the show_session action from the bridge.
+    #include <BLEDevice.h>
+    #include <BLEServer.h>
+    #include <BLEUtils.h>
+    #include <BLE2902.h>
+    #include "freertos/queue.h"
+
+    // ================= what the screen can show =================
     struct ScreenSession {
-      String agent;    // "Claude Code", "Codex"
-      String project;  // repo or folder name
-      String state;    // needs_input | error | done | working | idle
-      String summary;  // what the agent wants, one line, e.g. "Run: npm test"
-      long pos = 0;    // place in the queue, 1-based (0 = hide)
-      long total = 0;  // sessions in the queue
+      bool active = false;
+      String agent;          // "Claude", "Codex"
+      String project;        // repo, folder, or "3 sessions"
+      String state;          // needs_input | error | done | working | idle
+      String summary;        // what the agent wants
+      long pos = 0, total = 0;
+      uint32_t changedAt = 0;
     };
-    static ScreenSession g_session;
-    static bool g_hasSession = false;
+    static ScreenSession g_usb;      // from the bridge over USB
+    static ScreenSession g_claude;   // from the Claude app over Bluetooth
     static bool g_redraw = true;
 
-    // Colours match the light grid and the bridge's STATE_COLORS.
-    static uint16_t stateColor(const String& s) {
-      if (s == "needs_input") return ATECH_WARN;   // amber
-      if (s == "error")       return ATECH_ALERT;  // red
-      if (s == "done")        return ATECH_OK;     // green
-      if (s == "working")     return ATECH_ACCENT; // blue
-      return ATECH_MUTED;                          // idle
+    static int stateRank(const String& s) {
+      if (s == "needs_input") return 0;
+      if (s == "error")       return 1;
+      if (s == "done")        return 2;
+      if (s == "working")     return 3;
+      return 4;
     }
-
+    static uint16_t stateColor(const String& s) {
+      if (s == "needs_input") return ATECH_WARN;
+      if (s == "error")       return ATECH_ALERT;
+      if (s == "done")        return ATECH_OK;
+      if (s == "working")     return ATECH_ACCENT;
+      return ATECH_MUTED;
+    }
+    static void stateRgb(const String& s, uint8_t& r, uint8_t& g, uint8_t& b) {
+      // Same colours as STATE_COLORS in bridge/src/agent_controller/events.py
+      r = g = b = 0;
+      if (s == "needs_input")  { r = 255; g = 140; }
+      else if (s == "error")   { r = 255; }
+      else if (s == "done")    { g = 255; }
+      else if (s == "working") { g = 80; b = 255; }
+    }
     static const char* stateLabel(const String& s) {
       if (s == "needs_input") return "NEEDS YOU";
       if (s == "error")       return "ERROR";
@@ -59,66 +86,356 @@ code:
       return "IDLE";
     }
 
+    // The session on screen: the one that needs you most, then the latest change.
+    static ScreenSession* shown() {
+      ScreenSession* a = g_claude.active ? &g_claude : nullptr;
+      ScreenSession* b = g_usb.active ? &g_usb : nullptr;
+      if (!a) return b;
+      if (!b) return a;
+      int ra = stateRank(a->state), rb = stateRank(b->state);
+      if (ra != rb) return ra < rb ? a : b;
+      return (int32_t)(a->changedAt - b->changedAt) >= 0 ? a : b;
+    }
+
+    // ================= small JSON readers (flat fields only) =================
+    static String jStr(const String& js, const char* field, int from = 0) {
+      String pat = String("\"") + field + "\":";
+      int i = js.indexOf(pat, from);
+      if (i < 0) return String();
+      i += pat.length();
+      while (i < (int)js.length() && js[i] == ' ') i++;
+      if (i >= (int)js.length() || js[i] != '"') return String();
+      String out;
+      for (i++; i < (int)js.length(); i++) {
+        char c = js[i];
+        if (c == '\\' && i + 1 < (int)js.length()) { char n = js[++i]; out += (n == 'n' || n == 't') ? ' ' : n; }
+        else if (c == '"') break;
+        else out += c;
+      }
+      return out;
+    }
+    static long jNum(const String& js, const char* field, long fallback) {
+      String pat = String("\"") + field + "\":";
+      int i = js.indexOf(pat);
+      if (i < 0) return fallback;
+      i += pat.length();
+      while (i < (int)js.length() && js[i] == ' ') i++;
+      if (i >= (int)js.length() || !(isDigit(js[i]) || js[i] == '-')) return fallback;
+      return js.substring(i).toInt();
+    }
+    static String jEscape(const String& s) {
+      String out;
+      for (size_t i = 0; i < s.length(); i++) {
+        char c = s[i];
+        if (c == '"' || c == '\\') out += '\\';
+        out += c;
+      }
+      return out;
+    }
+    // The screen font is ASCII: fold Norwegian letters, drop other UTF-8.
+    static String toAscii(const String& s) {
+      String out;
+      for (size_t i = 0; i < s.length(); i++) {
+        uint8_t c = (uint8_t)s[i];
+        if (c < 0x80) { out += (char)c; continue; }
+        if (c == 0xC3 && i + 1 < s.length()) {
+          uint8_t n = (uint8_t)s[++i];
+          if (n == 0xA6) out += "ae"; else if (n == 0x86) out += "Ae";
+          else if (n == 0xB8) out += "o"; else if (n == 0x98) out += "O";
+          else if (n == 0xA5) out += "a"; else if (n == 0x85) out += "A";
+          continue;
+        }
+        // skip the rest of any other multi-byte character
+        while (i + 1 < s.length() && (((uint8_t)s[i + 1]) & 0xC0) == 0x80) i++;
+      }
+      return out;
+    }
+
+    // ================= Claude app over Bluetooth (Hardware Buddy) =================
+    // Nordic UART Service, newline-delimited JSON.
+    // NOTE: the link is not encrypted yet (status reports "sec": false). Commands and
+    // transcript snippets are readable by anyone in radio range. Add LE Secure
+    // Connections bonding before using this outside a test.
+    #define NUS_SERVICE "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+    #define NUS_RX      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+    #define NUS_TX      "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+
+    static BLECharacteristic* g_tx = nullptr;
+    static QueueHandle_t g_rxQueue = nullptr;     // bytes from the app, drained in loop
+    static volatile bool g_bleConnected = false;
+    static bool g_bleWasConnected = false;
+    static String g_rxLine;
+    static bool g_rxOverflow = false;
+    static uint32_t g_lastBeat = 0;
+    static String g_promptId, g_promptTool, g_owner;
+    static uint32_t g_approved = 0, g_denied = 0;
+
+    class ServerCallbacks : public BLEServerCallbacks {
+      void onConnect(BLEServer*) override { g_bleConnected = true; }
+      void onDisconnect(BLEServer*) override {
+        g_bleConnected = false;
+        BLEDevice::startAdvertising();   // let the app reconnect
+      }
+    };
+    class RxCallbacks : public BLECharacteristicCallbacks {
+      void onWrite(BLECharacteristic* c) override {
+        String v = c->getValue();
+        for (size_t i = 0; i < v.length(); i++) {
+          uint8_t b = (uint8_t)v[i];
+          xQueueSend(g_rxQueue, &b, 0);   // never block the Bluetooth task
+        }
+      }
+    };
+
+    // Send one JSON line to the app, in 20-byte notifications (the default MTU).
+    static void bleSend(const String& json) {
+      if (!g_bleConnected || !g_tx) return;
+      String line = json + "\n";
+      for (size_t i = 0; i < line.length(); i += 20) {
+        String part = line.substring(i, i + 20);
+        g_tx->setValue((uint8_t*)part.c_str(), part.length());
+        g_tx->notify();
+        delay(4);
+      }
+    }
+    static void bleAck(const String& cmd, bool ok) {
+      bleSend("{\"ack\":\"" + cmd + "\",\"ok\":" + (ok ? "true" : "false") + ",\"n\":0}");
+    }
+
+    static void bleSetup() {
+      g_rxQueue = xQueueCreate(8192, 1);
+      uint64_t mac = ESP.getEfuseMac();
+      char name[20];
+      snprintf(name, sizeof(name), "Claude-AC%02X%02X", (uint8_t)(mac >> 32), (uint8_t)(mac >> 40));
+      BLEDevice::init(name);
+      BLEServer* server = BLEDevice::createServer();
+      server->setCallbacks(new ServerCallbacks());
+      BLEService* svc = server->createService(NUS_SERVICE);
+      g_tx = svc->createCharacteristic(NUS_TX, BLECharacteristic::PROPERTY_NOTIFY);
+      g_tx->addDescriptor(new BLE2902());
+      BLECharacteristic* rx = svc->createCharacteristic(
+          NUS_RX, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+      rx->setCallbacks(new RxCallbacks());
+      svc->start();
+      BLEAdvertising* adv = BLEDevice::getAdvertising();
+      adv->addServiceUUID(NUS_SERVICE);
+      adv->setScanResponse(true);
+      BLEDevice::startAdvertising();
+    }
+
+    // One line from the app: a command, a heartbeat snapshot, or something we ignore.
+    static void handleBuddyLine(const String& line) {
+      if (line.indexOf("\"evt\":") >= 0 || line.indexOf("\"time\":") >= 0) return;
+
+      String cmd = jStr(line, "cmd");
+      if (cmd.length()) {
+        if (cmd == "status") {
+          bleSend(String("{\"ack\":\"status\",\"ok\":true,\"data\":{\"name\":\"Agent Controller\",\"sec\":false,")
+                  + "\"sys\":{\"up\":" + String(millis() / 1000) + ",\"heap\":" + String(ESP.getFreeHeap()) + "},"
+                  + "\"stats\":{\"appr\":" + String(g_approved) + ",\"deny\":" + String(g_denied) + "}}}");
+        } else if (cmd == "owner") {
+          g_owner = toAscii(jStr(line, "name"));
+          bleAck(cmd, true);
+          g_redraw = true;
+        } else if (cmd == "name" || cmd == "unpair") {
+          bleAck(cmd, true);
+        } else if (cmd != "char_begin") {   // no ack to char_begin = decline folder push
+          bleAck(cmd, false);
+        }
+        return;
+      }
+
+      if (line.indexOf("\"total\":") < 0) return;   // not a heartbeat
+      g_lastBeat = millis();
+      long total = jNum(line, "total", 0);
+      long running = jNum(line, "running", 0);
+      long waiting = jNum(line, "waiting", 0);
+      String msg = toAscii(jStr(line, "msg"));
+
+      String id, tool, hint;
+      int p = line.indexOf("\"prompt\":");
+      if (p >= 0) {
+        int q = p + 9;
+        while (q < (int)line.length() && line[q] == ' ') q++;
+        if (q >= (int)line.length() || line[q] != '{') p = -1;   // "prompt": null
+      }
+      if (p >= 0) {
+        id = jStr(line, "id", p);
+        tool = toAscii(jStr(line, "tool", p));
+        hint = toAscii(jStr(line, "hint", p));
+      }
+
+      ScreenSession next;
+      next.active = total > 0 || id.length();
+      next.agent = "Claude";
+      next.project = String(total) + (total == 1 ? " session" : " sessions");
+      if (waiting > 1) next.project += ", " + String(waiting) + " waiting";
+      if (id.length()) {
+        next.state = "needs_input";
+        next.summary = tool;
+        if (hint.length()) next.summary += ": " + hint;
+      } else if (running > 0) {
+        next.state = "working";
+        next.summary = msg;
+      } else {
+        next.state = "idle";
+        next.summary = msg;
+      }
+
+      bool newPrompt = id.length() && id != g_promptId;
+      g_promptId = id;
+      g_promptTool = tool;
+      if (newPrompt) speaker.playRTTTL("chirp:d=16,o=6,b=180:c,e,g");
+
+      if (next.active != g_claude.active || next.state != g_claude.state ||
+          next.summary != g_claude.summary || next.project != g_claude.project) {
+        next.changedAt = millis();
+        g_claude = next;
+        g_redraw = true;
+      }
+    }
+
+    // Answer the Claude app's pending prompt: "once" approves, "deny" rejects.
+    static bool answerClaude(bool allow) {
+      if (!g_promptId.length() || !g_bleConnected) return false;
+      bleSend("{\"cmd\":\"permission\",\"id\":\"" + jEscape(g_promptId) + "\",\"decision\":\"" +
+              (allow ? "once" : "deny") + "\"}");
+      if (allow) { g_approved++; speaker.playTone(1320, 60); } else { g_denied++; speaker.playTone(330, 120); }
+      g_claude.state = allow ? "working" : "idle";
+      g_claude.summary = String(allow ? "Approved: " : "Denied: ") + g_promptTool;
+      g_claude.changedAt = millis();
+      g_promptId = "";
+      g_redraw = true;
+      return true;
+    }
+
+    // ================= drawing =================
+    static void drawScreen() {
+      screen.clear();
+      screen.setTextSize(1);
+      int16_t w = screen.width();
+      const int16_t H = screen.height();
+      ScreenSession* s = shown();
+
+      if (!s) {
+        int16_t top = atech::drawTitleBar(screen, "Agent Controller", nullptr, ATECH_PANEL, ATECH_FG);
+        String hi = g_owner.length() ? "Hi " + g_owner + ", no agent needs you" : String("No agent needs you");
+        atech::drawCenteredText(screen, top + 18, atech::fitText(screen, hi, w - 8).c_str(), ATECH_FG);
+        const char* ble = g_bleConnected ? "Claude app: connected" : "Claude app: not connected";
+        atech::drawCenteredText(screen, top + 38, ble, ATECH_MUTED);
+        screen.display();
+        return;
+      }
+
+      // 160x80, built-in font: 6 px per character, 8 px tall, 12 px per line.
+      //   y  0-15  bar in the state's colour: agent, place in queue
+      //   y 20     state (coloured) + project (grey)
+      //   y 32+    what the agent wants, wrapped: 2 lines, 4 without the hint bar
+      //   y 66-79  hint bar, only when the agent needs you
+      uint16_t color = stateColor(s->state);
+      const int16_t barH = 16;
+      screen.fillRect(0, 0, w, barH, color);
+      screen.setTextColor(ATECH_BG);
+      String pos;
+      if (s->total > 1) pos = String(s->pos) + "/" + String(s->total);
+      int16_t posW = pos.length() ? screen.textWidth(pos) : 0;
+      screen.setCursor(4, 4);
+      screen.print(atech::fitText(screen, s->agent, w - 12 - posW));
+      if (posW) { screen.setCursor(w - 4 - posW, 4); screen.print(pos); }
+
+      const int16_t rowY = barH + 4;
+      const char* label = stateLabel(s->state);
+      screen.setTextColor(color);
+      screen.setCursor(4, rowY);
+      screen.print(label);
+      int16_t px = 4 + screen.textWidth(label) + 8;
+      screen.setTextColor(ATECH_MUTED);
+      screen.setCursor(px, rowY);
+      screen.print(atech::fitText(screen, s->project, w - px - 4));
+
+      int16_t hintH = 0;
+      if (s->state == "needs_input") {
+        hintH = 14;
+        screen.fillRect(0, H - hintH, w, hintH, ATECH_PANEL);
+        screen.setTextColor(ATECH_FG);
+        screen.setCursor(4, H - hintH + 3);
+        screen.print("L: approve   R: deny");
+      }
+      const int16_t textY = rowY + 12;
+      atech::drawWrappedText(screen, s->summary, 0, 4, textY, w - 8, H - hintH - textY);
+      screen.display();
+    }
+
+    // Slot 8 of the light grid and the button lights follow the Claude app / shown session.
+    static void updateLights() {
+      uint8_t r, g, b;
+      stateRgb(g_claude.active ? g_claude.state : String("idle"), r, g, b);
+      status.setPixel(8, r, g, b);
+      status.show();
+      ScreenSession* s = shown();
+      if (s && s->state == "needs_input") { approve.setColor(0, 255, 0); deny.setColor(255, 0, 0); }
+      else { approve.off(); deny.off(); }
+    }
+
+  setup: |
+    bleSetup();
+
   loop: |
-    // ---- actions from the bridge ----
+    // ---- bytes from the Claude app -> lines ----
+    uint8_t b;
+    while (g_rxQueue && xQueueReceive(g_rxQueue, &b, 0) == pdTRUE) {
+      if (b == '\n') {
+        if (!g_rxOverflow && g_rxLine.length()) handleBuddyLine(g_rxLine);
+        g_rxLine = "";
+        g_rxOverflow = false;
+      } else if (b != '\r') {
+        if (g_rxLine.length() < 4096) g_rxLine += (char)b; else g_rxOverflow = true;
+      }
+    }
+    if (g_bleConnected != g_bleWasConnected) { g_bleWasConnected = g_bleConnected; g_redraw = true; }
+    // No snapshot for 30 s: treat the Claude app as gone.
+    if (g_claude.active && (int32_t)(millis() - g_lastBeat) > 30000) {
+      g_claude.active = false;
+      g_promptId = "";
+      g_redraw = true;
+    }
+
+    // ---- actions from the bridge over USB ----
     if (atech_action == "show_session") {
-      g_session.agent   = atechJsonString(atech_value, "agent");
-      g_session.project = atechJsonString(atech_value, "project");
-      g_session.state   = atechJsonString(atech_value, "state");
-      g_session.summary = atechJsonString(atech_value, "summary");
-      g_session.pos     = atechNum(atech_value, "pos", 0);
-      g_session.total   = atechNum(atech_value, "total", 0);
-      if (!g_session.agent.length() || !g_session.state.length()) {
+      ScreenSession next;
+      next.active  = true;
+      next.agent   = atechJsonString(atech_value, "agent");
+      next.project = atechJsonString(atech_value, "project");
+      next.state   = atechJsonString(atech_value, "state");
+      next.summary = atechJsonString(atech_value, "summary");
+      next.pos     = atechNum(atech_value, "pos", 0);
+      next.total   = atechNum(atech_value, "total", 0);
+      next.changedAt = millis();
+      if (!next.agent.length() || !next.state.length()) {
         atechFail("show_session needs agent and state");
       } else {
-        g_hasSession = true;
+        g_usb = next;
         g_redraw = true;
       }
       atechDone();
     } else if (atech_action == "clear_session") {
-      g_hasSession = false;
+      g_usb.active = false;
       g_redraw = true;
       atechDone();
     }
 
-    // ---- screen: redraw only when something changed ----
+    // ---- buttons: answer the Claude app when its prompt is on screen ----
+    // (The bridge also receives every press as an approve / deny event over USB.)
+    bool approvePressed = approve.wasPressed();
+    bool denyPressed = deny.wasPressed();
+    if (shown() == &g_claude && g_claude.state == "needs_input") {
+      if (approvePressed) answerClaude(true);
+      else if (denyPressed) answerClaude(false);
+    }
+
+    // ---- redraw only when something changed ----
     if (g_redraw) {
       g_redraw = false;
-      screen.clear();
-      int16_t w = screen.width();
-
-      if (!g_hasSession) {
-        int16_t top = atech::drawTitleBar(screen, "Agent Controller", nullptr, ATECH_PANEL, ATECH_FG);
-        atech::drawCenteredText(screen, top + 22, "No agent needs you", ATECH_MUTED);
-      } else {
-        uint16_t color = stateColor(g_session.state);
-
-        // Top bar: which agent, in the state's colour.
-        String title = g_session.agent;
-        if (g_session.total > 1) title += "  " + String(g_session.pos) + "/" + String(g_session.total);
-        int16_t top = atech::drawTitleBar(screen, title.c_str(), nullptr, color, ATECH_BG);
-
-        // State in large text, project to the right of it.
-        screen.setTextSize(2);
-        screen.setTextColor(color);
-        screen.setCursor(4, top + 4);
-        screen.print(stateLabel(g_session.state));
-        int16_t y = top + 4 + screen.lineHeight() + 2;   // below the large text
-        screen.setTextSize(1);
-
-        // Project and what the agent wants.
-        screen.setTextColor(ATECH_MUTED);
-        screen.setCursor(4, y);
-        screen.print(atech::fitText(screen, g_session.project, w - 8));
-        y += screen.lineHeight() + 1;
-
-        if (g_session.state == "needs_input") {
-          int16_t bar = screen.lineHeight() + 6;
-          atech::drawWrappedText(screen, g_session.summary, 0, 4, y, w - 8, screen.height() - bar - y);
-          atech::drawStatusBar(screen, "Left: approve   Right: deny");
-        } else {
-          atech::drawWrappedText(screen, g_session.summary, 0, 4, y, w - 8, screen.height() - y);
-        }
-      }
-      screen.display();
+      drawScreen();
+      updateLights();
     }

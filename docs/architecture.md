@@ -1,6 +1,26 @@
 # Architecture
 
-Three parts: the agents report events, the bridge on the PC keeps one combined session list, and the board shows it and sends back button presses.
+Two paths into one device:
+
+- **Claude desktop app → board, over Bluetooth.** The app's Hardware Buddy bridge sends a snapshot of all Claude Code and Cowork sessions and any pending permission prompt. The board answers the prompt directly. No bridge, no hooks.
+- **Other agents → bridge → board, over USB.** Agents like Codex report events through hooks. The bridge on the PC keeps one combined session list and drives the board.
+
+The screen shows whichever session needs you most (`needs_input` before `error`, `done`, `working`, `idle`; latest change on a tie).
+
+## Claude app over Bluetooth
+
+Protocol: [Hardware Buddy REFERENCE.md](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md). Only available with Developer Mode on in the Claude app, and not an officially supported product feature.
+
+- **Transport:** Nordic UART Service, newline-delimited JSON. The board advertises as `Claude-AC` plus four hex digits.
+- **Snapshot from the app** (on every change, and every 10 s): `total`, `running`, `waiting`, `msg`, and `prompt: {id, tool, hint}` when a decision is needed. No snapshot for 30 s means the app is gone.
+- **Answer from the board:** `{"cmd":"permission","id":"<prompt.id>","decision":"once"}` to approve, `"deny"` to reject.
+- **Commands we ack:** `status` (with approve/deny counts), `owner` (shown on the idle screen), `name`, `unpair`. We decline folder push by not acking `char_begin`.
+- **On screen:** agent "Claude", the session count as project, the prompt's tool and hint as the request.
+- **Light grid:** slot 8 (bottom right) shows the Claude app's state. Slots 0–7 are the bridge's.
+- **Limit:** the snapshot covers all Claude sessions together. It does not say which session or project a prompt comes from.
+- **Not done yet: encryption.** The link is unencrypted, so prompts and commands can be read by anyone in Bluetooth range. The protocol recommends LE Secure Connections bonding with a passkey shown on the device. Add it before using this outside a test.
+
+## Agents through the bridge (USB)
 
 ```mermaid
 sequenceDiagram

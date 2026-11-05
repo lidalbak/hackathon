@@ -22,15 +22,15 @@ What has to set it apart:
 
 ```mermaid
 flowchart LR
-    CC[Claude Code] -- hooks --> BR
+    CA[Claude app<br/>Claude Code + Cowork] -- "Bluetooth: sessions, prompt" --> FW
+    FW -- "approve / deny" --> CA
     CX[Codex] -- hooks --> BR
     BR[PC bridge<br/>bridge/] -- "USB serial, JSON lines" --> FW[Atech board<br/>firmware/controller]
     FW -- "button presses" --> BR
-    BR -- "approve / deny" --> CC
     BR -- "approve / deny" --> CX
 ```
 
-The agents report events through their hook systems. The bridge turns them into one session list, decides what matters most, and drives the board over USB. The board stays local: no cloud gateway sits between your agents and the device. Full design and message protocol in [docs/architecture.md](docs/architecture.md).
+Two paths into the same device. The **Claude desktop app** talks to the board directly over Bluetooth, using Anthropic's Hardware Buddy protocol. **Other agents** such as Codex report through their hooks to the bridge, which drives the board over USB. The screen always shows the session that needs you most. Neither path goes through a cloud service. Full design and message protocol in [docs/architecture.md](docs/architecture.md).
 
 ## Repository layout
 
@@ -68,10 +68,24 @@ atech send show_session '{"agent": "Codex", "project": "demo", "state": "needs_i
 
 | Part | State |
 | --- | --- |
-| Firmware | Compiles. Screen shows agent, project, state and request. Not yet flashed or tested on the board |
+| Firmware over USB | Flashed and working: screen, light grid, speaker and buttons respond to manual commands |
+| Claude app over Bluetooth | Built (v0.3), compiles. Not yet tested with the app. Link not encrypted yet |
 | Bridge | Session model, queue ranking and screen payload, tested. Hook listener and board driver not written |
-| Approving from the device | Researched: both agents have a `PermissionRequest` hook that waits for an answer. Not built |
-| Claude Code integration | Not started |
-| Codex integration | Not started |
+| Codex integration | Researched: `PermissionRequest` hook waits for an answer. Not built |
+
+### Flashing a prebuilt image
+
+`atech upload` builds from source and downloads the ESP32 compiler (2.4 GB) the first time. To flash a prebuilt image instead:
+
+```bash
+pip install esptool
+esptool --chip esp32s3 --before default-reset --after hard-reset write-flash 0x0 agent-controller-v0.3.bin
+```
+
+### Connecting the Claude app
+
+1. Claude app: **Help → Troubleshooting → Enable Developer Mode**.
+2. **Developer → Open Hardware Buddy…** → **Connect** → pick `Claude-AC…`. Allow Bluetooth when macOS asks.
+3. The idle screen says "Claude app: connected". When a Claude Code or Cowork session asks for permission, the screen shows it: left button approves, right button denies.
 
 Open questions are tracked in [docs/hardware.md](docs/hardware.md#open-questions).
