@@ -25,7 +25,7 @@ flowchart LR
     CC[Claude Code] -- hooks --> BR
     CX[Codex] -- hooks --> BR
     BR[PC bridge<br/>bridge/] -- "USB serial, JSON lines" --> FW[Atech board<br/>firmware/controller]
-    FW -- "button presses, presence" --> BR
+    FW -- "button presses" --> BR
     BR -- "approve / deny" --> CC
     BR -- "approve / deny" --> CX
 ```

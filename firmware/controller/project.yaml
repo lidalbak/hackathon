@@ -6,7 +6,6 @@
 #   speaker_play_rtttl                            -> chirp when an agent needs you
 # and listens to the events it already sends:
 #   approve / deny (1 = press, 0 = release)       -> answer the selected request
-#   presence_min_distance (mm)                    -> wake the screen when you lean in
 #
 # ASSUMPTION: 14-port board. Run `atech view firmware/controller` and check every
 # module against the board in your hand before flashing.
@@ -21,5 +20,4 @@ modules:
   - {id: button,          instance: approve,  port: 7}         # Small Kit
   - {id: neopixel,        instance: status,   port: 9}         # Small Kit, one LED per session
   - {id: button,          instance: deny,     port: 10}        # Small Kit
-  - {id: distance_sensor, instance: presence, port: 11}        # Small Kit
-  # Ports 13-14 are kept free for a rotary_encoder (scroll the request queue).
+  # Port 11 is free. Ports 13-14 are kept free for a rotary_encoder (scroll the request queue).

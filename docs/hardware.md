@@ -18,11 +18,11 @@ Defined in [`firmware/controller/project.yaml`](../firmware/controller/project.y
 | 7 | Button (`button`) | `approve` | Small Kit | Approve the selected request |
 | 9 | Light grid 3×3 (`neopixel`) | `status` | Small Kit | One LED per session, up to 9 |
 | 10 | Button (`button`) | `deny` | Small Kit | Deny the selected request |
-| 11 | Distance sensor (`distance_sensor`) | `presence` | Small Kit | Wake the screen when you lean in |
+| 11 | free | | | |
 | 13–14 | free | | | Room for a knob (`rotary_encoder`) to scroll the queue |
 | 8 | USB-C | | | Power and data. Not in `project.yaml` |
 
-That leaves no spare double port except 13–14.
+That leaves port 11 and the double port 13–14 free.
 
 ### Upgrade path
 
@@ -35,11 +35,10 @@ That leaves no spare double port except 13–14.
 - **One program per board.** Only one program can hold the serial port. While the bridge runs, stop `atech monitor`, and stop the bridge before `atech upload`.
 - **Confirm each action.** The board can drop actions that arrive in a flood. The bridge waits for each `board.call()` to be confirmed before sending the next.
 - **BLE is possible, not built in.** The ESP32-S3 does BLE only, and the Atech SDK generates nothing for it. Pairing directly with Anthropic's Hardware Buddy API would mean writing that BLE service ourselves.
-- **One distance sensor per project.** It uses the chip's only hardware I2C bus.
 
 ## Open questions
 
 - [ ] **Which board is in the Small Kit: 10-port or 14-port?** The layout assumes 14-port. Run `atech view firmware/controller` and compare with the board in your hand.
-- [ ] **What exactly is in our Small Kit and in the add-on pile?** Confirm we have two buttons, the screen, the light grid and the distance sensor, plus the speaker and microphone.
+- [ ] **What exactly is in our Small Kit and in the add-on pile?** Confirm we have two buttons, the screen and the light grid, plus the speaker and microphone.
 - [ ] **Can we get a Big Screen and a knob?** Both make the demo much stronger.
 - [ ] **How do the modules get mounted?** Clawd uses a printed shell and ribbon cables. Do we have access to a 3D printer?

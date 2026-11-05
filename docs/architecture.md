@@ -63,7 +63,6 @@ USB serial, 115200 baud, one JSON object per line. The bridge uses the Atech Pyt
 | --- | --- | --- |
 | `approve` | 1 on press, 0 on release | Approve the selected request |
 | `deny` | 1 on press, 0 on release | Deny the selected request |
-| `presence_min_distance` | mm, `32767` = nothing in range | Wake the screen when someone is close |
 | `mic_level` | 0–32767 every 250 ms | Voice activity, later |
 
 ### Planned custom actions (need firmware code)
