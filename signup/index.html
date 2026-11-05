@@ -1,0 +1,774 @@
+<title>Stillroom</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Stillroom is a small sensor and a wall screen for your short-term rental. The screen gives guests the Wi-Fi, checkout time and fresh-air tips, asks them to quiet down when quiet hours are broken, and only alerts you if they do not. No cameras, no audio recording.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a quiet page around one object. Headline + sign-up on the left, the device guests see on the right; then one night told as a chart, and the rest reads like a spec sheet. */
+:root {
+  --paper: #f2f4f1;
+  --panel: #ffffff;
+  --ink: #17222a;
+  --muted: #5b676d;
+  --line: #d6dcd8;
+  --noise: #d9532f;
+  --co2: #2f7a68;
+  --focus: #2b59c3;
+  --amber: #b97a0b;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.75rem;
+  --step-3: clamp(2.3rem, 5.2vw, 3.9rem);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1519; --panel: #172026; --ink: #e5ebe8; --muted: #9aa7ad; --line: #2a353c;
+    --noise: #f07250; --co2: #4fb39a; --focus: #8aa8ff; --amber: #f2b33d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1519; --panel: #172026; --ink: #e5ebe8; --muted: #9aa7ad; --line: #2a353c;
+  --noise: #f07250; --co2: #4fb39a; --focus: #8aa8ff; --amber: #f2b33d; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+a { color: inherit; text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 2px;
+}
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -0.015em; }
+p { margin: 0; }
+.label { font-family: var(--font-data); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+/* ---------- header ---------- */
+header { padding-block: 22px; }
+header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; text-decoration: none; }
+.meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
+.meter i { width: 3px; border-radius: 2px; background: var(--ink); }
+.meter i:nth-child(1) { height: 6px; } .meter i:nth-child(2) { height: 10px; } .meter i:nth-child(3) { height: 15px; }
+.meter i:nth-child(4) { height: 18px; background: var(--noise); }
+.header-link { font-size: var(--step--1); font-weight: 500; }
+
+/* ---------- hero ---------- */
+.hero { padding-block: 28px 64px; }
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center; }
+.hero h1 { font-size: var(--step-3); margin-top: 14px; }
+.hero h1 em { font-style: normal; color: var(--noise); }
+.lede { margin-top: 20px; font-size: var(--step-1); color: var(--muted); max-width: 33ch; line-height: 1.45; }
+
+.signup { margin-top: 32px; display: grid; gap: 12px; max-width: 460px; }
+.field { display: grid; gap: 6px; }
+.field label { font-size: var(--step--1); font-weight: 600; }
+.signup input, .signup select {
+  font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; width: 100%;
+}
+.signup select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 52%, calc(100% - 15px) 52%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 40px; }
+.row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.signup button {
+  font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px;
+  padding: 14px 18px; background: var(--ink); color: var(--paper);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+.signup button:hover { transform: translateY(-1px); }
+.signup button[disabled] { opacity: 0.6; cursor: progress; transform: none; }
+.fine { font-size: var(--step--1); color: var(--muted); }
+.status { font-size: var(--step--1); font-weight: 500; min-height: 1.4em; }
+.status.error { color: var(--noise); }
+.done { margin-top: 32px; max-width: 460px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); display: grid; gap: 6px; }
+.done h3 { font-size: var(--step-1); }
+
+/* ---------- chart ---------- */
+.chart { overflow: hidden; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .limit { stroke: var(--noise); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.7; }
+.chart .noise-line { fill: none; stroke: var(--noise); stroke-width: 2.25; stroke-linejoin: round; }
+.chart .co2-line { fill: none; stroke: var(--co2); stroke-width: 2.25; stroke-linejoin: round; }
+.chart .noise-area { fill: var(--noise); opacity: 0.08; }
+.chart .playhead { stroke: var(--ink); stroke-width: 1; opacity: 0.35; }
+.chart .playdot { fill: var(--panel); stroke: var(--noise); stroke-width: 2; }
+.chart .nudge-line { stroke: var(--amber); stroke-width: 1.25; }
+.chart .nudge-text { fill: var(--amber); font-weight: 500; }
+.chart .nudge { transition: opacity 250ms ease; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: var(--step--1); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* ---------- guest screen (wall tablet) + sensor ---------- */
+.rig-figure { margin: 0; display: grid; gap: 16px; justify-items: center; min-width: 0; width: 100%; }
+.rig { display: flex; align-items: flex-end; width: 100%; min-width: 0; }
+.tablet-host { flex: 1; min-width: 0; }
+.tablet { background: linear-gradient(160deg, #20282d, #0d1215); border-radius: 22px; padding: 11px; box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 0 rgba(0,0,0,.25), 0 40px 70px -40px rgba(23,34,42,.7); }
+.tablet-screen { position: relative; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; container-type: inline-size; background: #0c142f; color: #fff; }
+.tablet-screen > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tablet-screen stop { transition: stop-color 450ms ease; }
+.gs-stars, .gs-moon { transition: opacity 450ms ease; }
+.gs-top { position: absolute; top: 5cqw; left: 5.5cqw; right: 5.5cqw; display: flex; justify-content: space-between; align-items: flex-start; gap: 4cqw; transition: color 450ms ease; }
+.gs-clock { font-family: var(--font-display); font-weight: 500; font-size: 14cqw; line-height: 0.88; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.gs-day { font-family: var(--font-data); font-size: 2.2cqw; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; margin-top: 2cqw; }
+.gs-hello { font-weight: 600; font-size: 3.4cqw; text-align: right; line-height: 1.25; transition: opacity 450ms ease; }
+.gs-hello small { display: block; font-weight: 400; font-size: 2.3cqw; opacity: 0.75; }
+.gs-bar { position: absolute; left: 4cqw; right: 4cqw; bottom: 4cqw; display: grid; grid-template-columns: 1.45fr 1fr 1fr 1fr; gap: 2.6cqw; padding: 3cqw 3.2cqw; border-radius: 3.2cqw; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: opacity 450ms ease, transform 450ms ease; }
+.gs-item { min-width: 0; }
+.gs-wifi { display: flex; gap: 2cqw; align-items: center; }
+.gs-qr { width: 8.5cqw; height: 8.5cqw; flex: none; background: #fff; border-radius: 1cqw; padding: 0.6cqw; }
+.gs-k { font-family: var(--font-data); font-size: 1.75cqw; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.72; }
+.gs-v { font-weight: 600; font-size: 2.8cqw; line-height: 1.2; overflow-wrap: anywhere; }
+.gs-s { font-size: 1.95cqw; opacity: 0.8; line-height: 1.3; }
+.gs-air.advice .gs-v { color: #ffd27a; }
+.gs-alert { position: absolute; left: 4cqw; right: 4cqw; bottom: 4cqw; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 1cqw 4cqw; padding: 3.6cqw 4.2cqw; border-radius: 3.2cqw; background: rgba(255, 238, 200, 0.9); border: 1px solid rgba(255,255,255,.5); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #2a1405; opacity: 0; transform: translateY(3cqw); transition: opacity 450ms ease, transform 450ms ease; pointer-events: none; }
+.gs-alert .gs-wave { grid-row: span 3; }
+.gs-wave { display: flex; align-items: center; gap: 1.1cqw; height: 10cqw; }
+.gs-wave span { width: 1.5cqw; height: calc(var(--h) * var(--amp, 0.6) * 10cqw); border-radius: 1cqw; background: #2a1405; animation: gs-wave 820ms ease-in-out infinite alternate; animation-delay: var(--d); transform-origin: center; }
+@keyframes gs-wave { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+.gs-title { font-family: var(--font-display); font-weight: 700; font-size: 6.2cqw; line-height: 1; letter-spacing: -0.015em; }
+.gs-sub { font-size: 2.4cqw; line-height: 1.35; }
+.gs-db { font-family: var(--font-data); font-size: 2.3cqw; letter-spacing: 0.06em; opacity: 0.8; }
+.tablet-screen[data-state="quiet"] .gs-top { color: #2a1405; }
+.tablet-screen[data-state="quiet"] .gs-hello { opacity: 0; }
+.tablet-screen[data-state="quiet"] .gs-bar { opacity: 0; transform: translateY(3cqw); }
+.tablet-screen[data-state="quiet"] .gs-alert { opacity: 1; transform: none; }
+.link { flex: none; width: 54px; margin-bottom: 30px; display: grid; justify-items: center; gap: 2px; font-family: var(--font-data); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.link svg { width: 100%; height: 12px; overflow: visible; }
+.link path { fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 6; animation: link-flow 1s linear infinite; }
+@keyframes link-flow { to { stroke-dashoffset: -16; } }
+.puck-wrap { flex: none; display: grid; justify-items: center; gap: 8px; font-family: var(--font-data); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.puck { position: relative; width: 70px; height: 70px; border-radius: 24px; background: radial-gradient(circle, rgba(23,34,42,.22) 1.1px, transparent 1.5px) 3px 3px / 8px 8px, linear-gradient(160deg, #f6f8f5, #cbd3cf); box-shadow: inset 0 1px 0 #fff, inset 0 -2px 4px rgba(0,0,0,.08), 0 12px 22px -12px rgba(23,34,42,.6); }
+.puck i { position: absolute; left: 50%; bottom: 9px; width: 16px; height: 3px; margin-left: -8px; border-radius: 2px; background: #3fbf8f; box-shadow: 0 0 8px rgba(63,191,143,.75); transition: background-color 450ms ease, box-shadow 450ms ease; }
+.rig[data-state="quiet"] .puck i { background: #f2b33d; box-shadow: 0 0 9px rgba(242,179,61,.9); }
+.rig-figure figcaption { font-size: var(--step--1); color: var(--muted); text-align: center; max-width: 46ch; }
+.device-tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; }
+.device-tabs button { font: inherit; font-size: var(--step--1); font-weight: 500; color: var(--muted); background: transparent; border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; }
+.device-tabs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* ---------- one night, told by scrolling ---------- */
+.story-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 56px; margin-top: 8px; }
+.story-steps { list-style: none; margin: 0; padding: 6vh 0 38vh; }
+.story-step { min-height: 72vh; display: grid; align-content: center; gap: 10px; max-width: 30rem; transition: opacity 250ms ease; }
+.story-step time { font-family: var(--font-data); font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.story-step.key time { color: var(--amber); font-weight: 500; }
+.story-step.ok time { color: var(--co2); font-weight: 500; }
+.story-step h3 { font-size: var(--step-2); }
+.story-step p { color: var(--muted); }
+.js-story .story-step { opacity: 0.28; }
+.js-story .story-step.active { opacity: 1; }
+.story-stage { position: sticky; top: 0; height: 100vh; display: grid; align-content: center; justify-items: center; gap: 14px; min-width: 0; }
+.story .rig { max-width: 600px; }
+.stage-chart { width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px 10px; }
+.phone { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: var(--step--1); }
+.phone .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--co2); flex: none; }
+.phone[data-state="countdown"] .dot { background: var(--amber); }
+.phone b { font-weight: 600; }
+
+/* ---------- what it catches (short strip) ---------- */
+.catches { padding-block: 36px 40px; }
+.catches-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.catches-head a { font-size: var(--step--1); font-weight: 500; }
+.catch-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.catch-list li { display: grid; gap: 4px; align-content: start; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.catch-list svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 6px; }
+.catch-list b { font-weight: 600; line-height: 1.3; }
+.catch-list span { font-size: var(--step--1); color: var(--muted); }
+
+/* ---------- sections ---------- */
+section { padding-block: 64px; border-top: 1px solid var(--line); }
+.section-head { display: grid; gap: 10px; max-width: 640px; }
+.section-head h2 { font-size: var(--step-2); }
+.section-head p { color: var(--muted); }
+
+.specs { margin-top: 32px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 2px solid var(--ink); }
+.spec { padding: 18px 18px 6px 0; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.spec + .spec { padding-left: 18px; border-left: 1px solid var(--line); }
+.spec .unit { font-family: var(--font-data); font-size: var(--step-2); font-weight: 500; }
+.spec h3 { font-size: var(--step-1); font-family: var(--font-body); font-weight: 600; letter-spacing: 0; }
+.spec p { color: var(--muted); font-size: var(--step--1); }
+.spec .scale { font-family: var(--font-data); font-size: 0.75rem; color: var(--ink); }
+.tamper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 8px 18px; align-items: baseline; padding: 18px 0 6px; border-top: 1px solid var(--line); }
+.tamper .unit { font-family: var(--font-data); font-size: var(--step-2); font-weight: 500; }
+.tamper h3 { font-size: var(--step-1); font-family: var(--font-body); font-weight: 600; letter-spacing: 0; }
+.tamper p { color: var(--muted); font-size: var(--step--1); max-width: 62ch; margin-top: 6px; }
+
+.steps { margin-top: 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; counter-reset: step; list-style: none; padding: 0; }
+.steps li { display: grid; gap: 8px; align-content: start; }
+.steps li::before { counter-increment: step; content: counter(step); font-family: var(--font-data); font-size: var(--step--1); width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--ink); border-radius: 50%; }
+.steps h3 { font-size: var(--step-1); font-family: var(--font-body); font-weight: 600; letter-spacing: 0; }
+.steps p { color: var(--muted); }
+
+.privacy .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; }
+.privacy-list { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.privacy-list div { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 16px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.privacy-list dt { font-family: var(--font-data); font-size: var(--step--1); }
+.privacy-list dd { margin: 0; color: var(--muted); }
+.yes { color: var(--co2); }
+.no { color: var(--noise); }
+
+.faq { margin-top: 28px; display: grid; gap: 0; border-top: 1px solid var(--line); max-width: 760px; }
+.faq details { border-bottom: 1px solid var(--line); padding-block: 16px; }
+.faq summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; font-family: var(--font-data); color: var(--muted); }
+.faq details[open] summary::after { content: "–"; }
+.faq details p { margin-top: 10px; color: var(--muted); max-width: 62ch; }
+
+.closing { text-align: left; }
+.closing .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: end; }
+.closing h2 { font-size: var(--step-3); }
+
+footer { padding-block: 28px 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--step--1); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero .wrap, .privacy .wrap, .closing .wrap { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .story-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .story-stage { order: -1; height: auto; z-index: 2; background: var(--paper); padding-block: 10px 12px; border-bottom: 1px solid var(--line); gap: 10px; }
+  .story .link, .story .puck-wrap { display: none; }
+  .story .rig { max-width: 360px; margin-inline: auto; }
+  .story .tablet { padding: 7px; border-radius: 16px; }
+  .stage-chart { padding: 8px 10px 4px; border-radius: 14px; }
+  .stage-chart .legend { display: none; }
+  .story-step { min-height: 52vh; }
+  .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catch-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .spec:nth-child(3) { padding-left: 0; border-left: 0; }
+  .spec:nth-child(n+3) { border-top: 1px solid var(--line); }
+}
+@media (max-width: 560px) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .puck { width: 52px; height: 52px; border-radius: 18px; }
+  .puck i { bottom: 7px; width: 12px; margin-left: -6px; }
+  .link { width: 34px; margin-bottom: 24px; }
+  .tablet { padding: 7px; border-radius: 16px; }
+  .values { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .specs, .steps, .tamper { grid-template-columns: minmax(0, 1fr); }
+  .catch-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .catch-list li { padding: 12px; }
+  .catch-list li:last-child { grid-column: 1 / -1; }
+  .spec + .spec { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+  .privacy-list div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  section { padding-block: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Stillroom home"><span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Stillroom</a>
+    <a class="header-link" href="#join">Join the waitlist</a>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <p class="label">For Airbnb and short-term rental hosts</p>
+        <h1>Guests quiet down <em>before</em> you have to call.</h1>
+        <p class="lede">Stillroom is a small sensor and a wall screen for your rental. The screen gives guests the Wi-Fi, checkout time and fresh-air tips. When quiet hours are broken it asks them to turn it down, and only alerts you if they don't. No cameras. No audio recording.</p>
+
+        <form class="signup" id="signup-hero" data-source="hero" novalidate>
+          <div class="row">
+            <div class="field">
+              <label for="email-hero">Email</label>
+              <input id="email-hero" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+            </div>
+            <div class="field">
+              <label for="units-hero">Rentals you manage</label>
+              <select id="units-hero" name="units" required>
+                <option value="" selected disabled>Choose</option>
+                <option value="1">1</option>
+                <option value="2-5">2–5</option>
+                <option value="6-20">6–20</option>
+                <option value="21+">21 or more</option>
+              </select>
+            </div>
+          </div>
+          <div class="hp" aria-hidden="true"><label for="website-hero">Website</label><input id="website-hero" name="website" tabindex="-1" autocomplete="off"></div>
+          <button type="submit" id="submit-hero">Join the waitlist</button>
+          <p class="status" id="status-hero" role="status" aria-live="polite"></p>
+          <p class="fine">We only email you about the launch. Unsubscribe with one reply.</p>
+        </form>
+      </div>
+
+      <figure class="rig-figure" aria-labelledby="device-cap">
+        <div class="rig" id="hero-rig" data-state="evening" aria-hidden="true">
+          <div class="tablet-host" id="hero-screen"></div>
+          <div class="link"><svg viewBox="0 0 54 12"><path d="M3 6 H51"/></svg><span>Wi-Fi</span></div>
+          <div class="puck-wrap"><div class="puck"><i></i></div><span>Sensor</span></div>
+        </div>
+        <div class="device-tabs" role="group" aria-label="Show the guest screen at">
+          <button type="button" data-state="evening" aria-pressed="true">Evening</button>
+          <button type="button" data-state="stuffy" aria-pressed="false">Stuffy room</button>
+          <button type="button" data-state="quiet" aria-pressed="false">Too loud at 01:02</button>
+        </div>
+        <figcaption id="device-cap">What guests see on the wall screen. The sensor sits on a shelf and sends its readings over Wi-Fi. Example screens; the first units are being built now.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <section class="catches" aria-labelledby="catches-title">
+    <div class="wrap">
+      <div class="catches-head">
+        <p class="label" id="catches-title">What it catches</p>
+        <a href="#measures">How it measures</a>
+      </div>
+      <ul class="catch-list">
+        <li style="color:var(--noise)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3l4.5-4v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.5 6a8 8 0 0 1 0 12"/></svg><b style="color:var(--ink)">Loud parties</b><span>Noise in quiet hours</span></li>
+        <li style="color:var(--co2)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2a4.5 4.5 0 0 1 5.5 4.3"/></svg><b style="color:var(--ink)">More guests than booked</b><span>CO₂ from breathing</span></li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="15" width="15" height="4" rx="1"/><path d="M14 15v4"/><path d="M20.5 15v4"/><path d="M19 12c0-1.8 2-2 2-4s-2-2.2-2-4"/></svg><b>Smoking indoors</b><span>Smoke particles (PM2.5)</span></li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><b>Sensor moved or hidden</b><span>Motion sensor</span></li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.2 4 6 7.2 6 11a6 6 0 0 1-12 0c0-3.8 2.8-7 6-11z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></svg><b>Stuffy or damp rooms</b><span>CO₂, temperature, humidity</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="story" aria-labelledby="night-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">One night</p>
+        <h2 id="night-title">Guests get the first word. You only hear about it if they ignore it.</h2>
+        <p>Scroll through a Saturday night in a rental booked for two.</p>
+      </div>
+      <div class="story-grid">
+        <ol class="story-steps">
+          <li class="story-step" data-t="0"><time>22:00</time><h3>Guests settle in.</h3><p>The screen works as your welcome note: the Wi-Fi, checkout time and whether the air is fresh. Nothing about rules yet.</p></li>
+          <li class="story-step" data-t="60"><time>23:00</time><h3>Quiet hours begin.</h3><p>Nothing changes for the guests. Stillroom starts comparing the noise with the limit you set, here 60 dB.</p></li>
+          <li class="story-step" data-t="172"><time>00:52</time><h3>Friends come over.</h3><p>Noise climbs past 55 dB and CO₂ rises with more people breathing in the room. Still under your limit, so no one is bothered.</p></li>
+          <li class="story-step key" data-t="182"><time>01:02</time><h3>The screen asks first.</h3><p>Over 60 dB in quiet hours. The screen turns amber and asks guests to turn it down, and tells them you will hear about it in 10 minutes if they don't.</p></li>
+          <li class="story-step ok" data-t="190"><time>01:10</time><h3>They turn it down.</h3><p>Back under the limit within minutes. Your phone stayed silent and you never had to call. Had it stayed loud until 01:12, you would have got a message with these readings.</p></li>
+          <li class="story-step" data-t="300"><time>03:00</time><h3>A quiet night, on record.</h3><p>The whole night is in your dashboard: noise, CO₂ and the two minutes the screen stepped in.</p></li>
+        </ol>
+        <div class="story-stage" aria-hidden="true">
+          <div class="rig" id="story-rig" data-state="evening">
+            <div class="tablet-host" id="story-screen"></div>
+            <div class="link"><svg viewBox="0 0 54 12"><path d="M3 6 H51"/></svg><span>Wi-Fi</span></div>
+            <div class="puck-wrap"><div class="puck"><i></i></div><span>Sensor</span></div>
+          </div>
+          <div class="stage-chart">
+            <div class="chart" id="chart"></div>
+            <div class="legend">
+              <span><i style="background:var(--noise)"></i>Noise, dB</span>
+              <span><i style="background:var(--co2)"></i>CO₂, ppm</span>
+              <span><i style="border-top:1px dashed var(--noise);height:0"></i>Quiet-hours limit 60 dB</span>
+            </div>
+          </div>
+          <p class="phone" id="phone" data-state="silent"><span class="dot"></span><span><b>Your phone:</b> <span id="phone-text">silent</span></span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="measures" aria-labelledby="measures-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">What it measures</p>
+        <h2 id="measures-title">Four signals that tell you what is happening, without watching anyone.</h2>
+      </div>
+      <div class="specs">
+        <div class="spec">
+          <span class="unit" style="color:var(--noise)">dB</span>
+          <h3>Noise level</h3>
+          <p>Loudness only. You set the limit for quiet hours; Stillroom waits for it to stay high before it alerts you, so one slammed door is not a party.</p>
+          <span class="scale">40 dB quiet flat · 60 dB lively talk · 75+ dB party</span>
+        </div>
+        <div class="spec">
+          <span class="unit" style="color:var(--co2)">ppm</span>
+          <h3>CO₂</h3>
+          <p>Every person in a room breathes out CO₂. A sharp, steady climb means more people than the booking, even when nobody is loud.</p>
+          <span class="scale">~420 ppm outdoor air · 1,000+ ppm crowded room</span>
+        </div>
+        <div class="spec">
+          <span class="unit">PM2.5</span>
+          <h3>Smoke</h3>
+          <p>Cigarette smoke fills the air with fine particles. A sudden spike means someone is smoking inside, even if they open a window afterwards.</p>
+          <span class="scale">Under 15 µg/m³ clean air · 100+ µg/m³ smoking</span>
+        </div>
+        <div class="spec">
+          <span class="unit">°C · %</span>
+          <h3>Temperature and humidity</h3>
+          <p>Catches heating left on full while guests are out, and damp air that turns into mould, like long showers with the fan off.</p>
+          <span class="scale">Alerts outside the range you choose</span>
+        </div>
+      </div>
+      <div class="tamper">
+        <span class="unit">Moved?</span>
+        <div>
+          <h3>Tamper alert</h3>
+          <p>A motion sensor inside knows when the sensor is lifted, turned or carried off, and alerts you at once. A guest cannot quietly put it in a cupboard before the party. It senses the sensor itself, not the people in the room.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">How it works</p>
+        <h2 id="how-title">Set it up once. It looks after the guests from there.</h2>
+      </div>
+      <ol class="steps">
+        <li><h3>Set it up</h3><p>Put the sensor in the living room or another shared space and hang the screen where guests will see it. Both join the rental's Wi-Fi. Add what guests need: Wi-Fi details and checkout time.</p></li>
+        <li><h3>Set your house rules</h3><p>Quiet hours, a noise limit, no smoking and the number of guests in the booking.</p></li>
+        <li><h3>Guests are asked first</h3><p>When quiet hours are broken, the screen asks guests to turn it down. You get an alert with the readings if it carries on for 10 minutes, or straight away if someone smokes or moves the device.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="privacy" aria-labelledby="privacy-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">Private by design</p>
+        <h2 id="privacy-title">Your guests are measured as numbers, never recorded.</h2>
+        <p>Airbnb allows noise monitors in shared spaces when the host discloses them and they do not record audio. Stillroom is built around those rules.</p>
+        <p><a href="https://www.airbnb.com/help/article/3061" target="_blank" rel="noopener">Read Airbnb's rules for devices</a></p>
+      </div>
+      <dl class="privacy-list">
+        <div><dt class="no">Audio</dt><dd>Never recorded or sent. The microphone only produces a decibel number.</dd></div>
+        <div><dt class="no">Video</dt><dd>No camera in the device.</dd></div>
+        <div><dt class="yes">Screen</dt><dd>Shows guests the Wi-Fi, checkout time, air and house rules. Never who is in the room.</dd></div>
+        <div><dt class="yes">Readings</dt><dd>Noise, CO₂, smoke particles, temperature and humidity, plus whether the sensor has been moved, sent to your dashboard.</dd></div>
+        <div><dt class="yes">Placement</dt><dd>Living room, kitchen or hallway. Never bedrooms or bathrooms.</dd></div>
+        <div><dt class="yes">Disclosure</dt><dd>Mention it in your listing, as Airbnb requires for noise monitors.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section aria-labelledby="faq-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">Questions</p>
+        <h2 id="faq-title">Before you sign up</h2>
+      </div>
+      <div class="faq">
+        <details><summary>When does Stillroom launch?</summary><p>We are building the first units now. Everyone on the waitlist hears first, before we open orders to anyone else.</p></details>
+        <details><summary>What will it cost?</summary><p>We will share the price with the waitlist before launch. Signing up does not commit you to anything.</p></details>
+        <details><summary>Will guests mind a screen in the room?</summary><p>It is built to be useful to them first: the Wi-Fi, checkout time and when to open a window, the things guests usually message you about. It only asks them to quiet down when quiet hours are broken, and it tells them before it tells you.</p></details>
+        <details><summary>Do I have to tell my guests?</summary><p>Yes. Airbnb requires hosts to disclose noise monitors in the listing. You do not have to say exactly where it is.</p></details>
+        <details><summary>How does it know someone is smoking?</summary><p>It measures fine particles (PM2.5) in the air. Cigarette smoke makes them jump within minutes, far above what cooking or dust does over the same time, so it needs no camera.</p></details>
+        <details><summary>What if a guest moves or hides it?</summary><p>You get an alert the moment the sensor is lifted or moved. Its motion sensor only feels the sensor being handled; it does not detect people walking around.</p></details>
+        <details><summary>Why CO₂ and not a people counter?</summary><p>People counters need a camera or have to track guests' phones. CO₂ rises with the number of people breathing in the room, so it shows a crowd without identifying anyone.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing" id="join" aria-labelledby="join-title">
+    <div class="wrap">
+      <div>
+        <p class="label">Waitlist</p>
+        <h2 id="join-title">Be first when Stillroom ships.</h2>
+      </div>
+      <form class="signup" id="signup-footer" data-source="footer" novalidate style="margin-top:0">
+        <div class="row">
+          <div class="field">
+            <label for="email-footer">Email</label>
+            <input id="email-footer" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+          </div>
+          <div class="field">
+            <label for="units-footer">Rentals you manage</label>
+            <select id="units-footer" name="units" required>
+              <option value="" selected disabled>Choose</option>
+              <option value="1">1</option>
+              <option value="2-5">2–5</option>
+              <option value="6-20">6–20</option>
+              <option value="21+">21 or more</option>
+            </select>
+          </div>
+        </div>
+        <div class="hp" aria-hidden="true"><label for="website-footer">Website</label><input id="website-footer" name="website" tabindex="-1" autocomplete="off"></div>
+        <button type="submit" id="submit-footer">Join the waitlist</button>
+        <p class="status" id="status-footer" role="status" aria-live="polite"></p>
+        <p class="fine">We only email you about the launch. Unsubscribe with one reply.</p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Stillroom</span>
+    <span>Noise and air sensing for short-term rentals</span>
+  </div>
+</footer>
+
+<script>
+// ---------------- settings ----------------
+// Paste the Google Apps Script web app URL here (see README). Empty = preview mode: nothing is saved.
+const SIGNUP_ENDPOINT = "https://script.google.com/macros/s/AKfycbzYShEPa9ccE-fa0G4GeAMTMfC9Pfk5UC0u5PB4ICG6IAlqODUsRTKhkAk3_nZcyzZWeg/exec";
+
+// ---------------- guest screen: a living sky over a fjord ----------------
+// Sky colours by minute of day (after midnight counts on from 1440): top, middle, horizon.
+const SKY = [
+  [1230, "#3d6aa6", "#d98f74", "#f3c27c"],
+  [1300, "#22396b", "#8a5a85", "#e0956c"],
+  [1355, "#14214a", "#33396f", "#5d5487"],
+  [1420, "#0b1430", "#19244f", "#2c3466"],
+  [1620, "#0a1128", "#17224b", "#26305f"],
+];
+const AMBER_SKY = ["#8a3a12", "#d97a2b", "#f6c35a"];
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mixHex = (a, b, f) => "#" + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * f).toString(16).padStart(2, "0")).join("");
+function skyAt(m) {
+  if (m < 720) m += 1440;
+  if (m <= SKY[0][0]) return SKY[0].slice(1);
+  for (let i = 0; i < SKY.length - 1; i++) {
+    const [a, b] = [SKY[i], SKY[i + 1]];
+    if (m <= b[0]) { const f = (m - a[0]) / (b[0] - a[0]); return [1, 2, 3].map(k => mixHex(a[k], b[k], f)); }
+  }
+  return SKY[SKY.length - 1].slice(1);
+}
+let screenCount = 0;
+function guestScreen(host, rig) {
+  const u = "gs" + (++screenCount);
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let stars = "";
+  for (let i = 0; i < 46; i++) stars += `<circle cx="${(rnd() * 400).toFixed(1)}" cy="${(rnd() * 150).toFixed(1)}" r="${(0.4 + rnd() * 0.9).toFixed(2)}" fill="#fff" opacity="${(0.35 + rnd() * 0.65).toFixed(2)}"/>`;
+  let qr = "";
+  const cell = (x, y) => `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+  for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
+    const finder = (x < 3 && y < 3) || (x > 7 && y < 3) || (x < 3 && y > 7);
+    if (finder ? !(x % 8 === 1 && y % 8 === 1) : rnd() > 0.52) qr += cell(x, y);
+  }
+  let bars = "";
+  [0.45, 0.7, 1, 0.8, 0.55, 0.9, 0.65, 1, 0.5].forEach((h, i) => bars += `<span style="--h:${h};--d:${(i * 97) % 600}ms"></span>`);
+  const windows = [[22, 201], [30, 201], [64, 199], [96, 203], [104, 203], [128, 206]].map(([x, y]) => `<rect x="${x}" y="${y}" width="3" height="3" fill="#ffd27a"/>`).join("");
+  host.innerHTML = `<div class="tablet"><div class="tablet-screen" data-state="evening">
+    <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="${u}-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0"/><stop offset="0.55"/><stop offset="1"/></linearGradient>
+        <linearGradient id="${u}-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0"/><stop offset="1"/></linearGradient>
+        <radialGradient id="${u}-glow"><stop offset="0" stop-color="#fff4d6" stop-opacity="0.5"/><stop offset="1" stop-color="#fff4d6" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect width="400" height="300" fill="url(#${u}-sky)"/>
+      <g class="gs-stars">${stars}</g>
+      <g class="gs-moon"><circle r="38" fill="url(#${u}-glow)"/><circle r="11" fill="#f7f0d8"/><circle cx="-3" cy="-2" r="2.2" fill="#e6dcc0"/><circle cx="4" cy="3" r="1.5" fill="#e6dcc0"/></g>
+      <path d="M0 176 L38 150 L70 163 L118 116 L158 150 L196 134 L238 160 L286 108 L330 148 L368 128 L400 146 L400 216 L0 216Z" fill="#2a3360" opacity="0.8"/>
+      <path d="M286 108 L276 122 L284 119 L292 126 L298 118Z M118 116 L110 128 L118 125 L126 131Z" fill="#e9eef6" opacity="0.55"/>
+      <path d="M0 192 L34 176 L72 196 L112 160 L152 188 L204 168 L252 196 L302 164 L346 190 L400 170 L400 222 L0 222Z" fill="#141b38"/>
+      <rect y="214" width="400" height="86" fill="url(#${u}-water)"/>
+      <g fill="#fff" opacity="0.14"><rect x="180" y="232" width="60" height="1"/><rect x="200" y="244" width="34" height="1"/><rect x="236" y="256" width="48" height="1"/><rect x="150" y="268" width="40" height="1"/></g>
+      <path d="M0 207 C46 196 104 200 160 214 L160 218 L0 218Z" fill="#0b1022"/>
+      <g fill="#0b1022"><rect x="18" y="198" width="18" height="12"/><path d="M16 199 L27 190 L38 199Z"/><rect x="60" y="196" width="10" height="12"/><path d="M58 197 L65 190 L72 197Z"/><rect x="92" y="200" width="16" height="10"/><path d="M90 201 L100 193 L110 201Z"/><rect x="124" y="203" width="9" height="9"/></g>
+      ${windows}
+    </svg>
+    <div class="gs-top"><div><div class="gs-clock" data-k="clock">21:40</div><div class="gs-day" data-k="day">Saturday</div></div><div class="gs-hello">Welcome, Anna<small>Fjordview apartment</small></div></div>
+    <div class="gs-bar">
+      <div class="gs-item gs-wifi"><svg class="gs-qr" viewBox="0 0 11 11" fill="#0b1022">${qr}</svg><div><div class="gs-k">Wi-Fi</div><div class="gs-v">Fjordview-Guest</div><div class="gs-s">pw nordlys2026</div></div></div>
+      <div class="gs-item"><div class="gs-k">Checkout</div><div class="gs-v">Sun 11:00</div><div class="gs-s">Keys on the table</div></div>
+      <div class="gs-item gs-air"><div class="gs-k">Air</div><div class="gs-v" data-k="air">Fresh</div><div class="gs-s" data-k="ppm">640 ppm CO₂</div></div>
+      <div class="gs-item"><div class="gs-k">Room</div><div class="gs-v">21.5 °C</div><div class="gs-s">45 % humidity</div></div>
+    </div>
+    <div class="gs-alert"><div class="gs-wave">${bars}</div><p class="gs-title">Please keep it down</p><p class="gs-sub">Neighbours are sleeping. Your host gets a message if it stays loud for 10 minutes.</p><p class="gs-db"><span data-k="db">66</span> dB · quiet hours 23–07</p></div>
+  </div></div>`;
+  const screen = host.querySelector(".tablet-screen");
+  const k = name => screen.querySelector(`[data-k="${name}"]`);
+  const skyStops = screen.querySelectorAll(`#${u}-sky stop`), waterStops = screen.querySelectorAll(`#${u}-water stop`);
+  const starsEl = screen.querySelector(".gs-stars"), moon = screen.querySelector(".gs-moon"), air = screen.querySelector(".gs-air"), wave = screen.querySelector(".gs-wave");
+  return function render({ m, noise, co2, asking }) {
+    const state = asking ? "quiet" : "evening";
+    screen.dataset.state = state;
+    if (rig) rig.dataset.state = state;
+    const sky = asking ? AMBER_SKY : skyAt(m);
+    skyStops.forEach((st, i) => st.style.stopColor = sky[i]);
+    waterStops[0].style.stopColor = mixHex(sky[2], "#0b1022", 0.45);
+    waterStops[1].style.stopColor = mixHex(sky[1], "#05070f", 0.7);
+    const mm = m < 720 ? m + 1440 : m;
+    const dark = Math.min(1, Math.max(0, (mm - 1250) / 140));
+    starsEl.style.opacity = asking ? 0.12 : dark;
+    const f = Math.min(1, Math.max(0, (mm - 1260) / 420));
+    moon.setAttribute("transform", `translate(${(365 - f * 150).toFixed(1)} ${(100 - Math.sin(f * Math.PI) * 28).toFixed(1)})`); // stays right of the clock
+    moon.style.opacity = asking ? 0.55 : 0.35 + 0.65 * dark;
+    const d = Math.round(m) % 1440;
+    k("clock").textContent = String(Math.floor(d / 60)).padStart(2, "0") + ":" + String(d % 60).padStart(2, "0");
+    k("day").textContent = mm >= 1440 ? "Sunday" : "Saturday";
+    const stuffy = co2 >= 1000;
+    air.classList.toggle("advice", stuffy);
+    k("air").textContent = stuffy ? "Open a window" : "Fresh";
+    k("ppm").textContent = (Math.round(co2 / 10) * 10).toLocaleString("en-US") + " ppm CO₂";
+    k("db").textContent = Math.round(noise);
+    wave.style.setProperty("--amp", Math.min(1, Math.max(0.35, (noise - 45) / 30)).toFixed(2));
+  };
+}
+
+// ---------------- hero: three example screens ----------------
+(function heroScreen() {
+  const render = guestScreen(document.getElementById("hero-screen"), document.getElementById("hero-rig"));
+  const tabs = [...document.querySelectorAll(".device-tabs button")];
+  const STATES = {
+    evening: { m: 1300, noise: 42, co2: 640, asking: false },
+    stuffy: { m: 1395, noise: 44, co2: 1180, asking: false },
+    quiet: { m: 1502, noise: 66, co2: 1010, asking: true },
+  };
+  function show(state) {
+    render(STATES[state]);
+    tabs.forEach(t => t.setAttribute("aria-pressed", String(t.dataset.state === state)));
+  }
+  let timer = null;
+  tabs.forEach(t => t.addEventListener("click", () => { clearInterval(timer); show(t.dataset.state); }));
+  show("evening");
+  // Cycle through the screens until the visitor picks one; stay still for reduced motion.
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const order = ["evening", "stuffy", "quiet"];
+    let i = 0;
+    timer = setInterval(() => { i = (i + 1) % order.length; show(order[i]); }, 4500);
+  }
+})();
+
+// ---------------- one night, driven by scroll ----------------
+(function story() {
+  const noise = [38, 36, 39, 37, 40, 38, 41, 39, 37, 40, 38, 39, 41, 39, 40, 41, 48, 55, 66, 52, 45, 42, 40, 39, 38, 37, 38, 36, 37, 36, 37];
+  const co2 = [620, 630, 640, 650, 655, 665, 670, 680, 690, 700, 705, 715, 725, 740, 750, 760, 840, 920, 1000, 1040, 1050, 1040, 1020, 990, 960, 930, 900, 880, 860, 850, 840];
+  const END = 300, NUDGE = 182, ALERT = 192, LIMIT = 60; // minutes after 22:00
+  const W = 560, H = 230, L = 40, R = 52, T = 14, B = 26;
+  const xm = m => L + (m / END) * (W - L - R);
+  const yN = v => T + (1 - (v - 30) / (90 - 30)) * (H - T - B);
+  const yC = v => T + (1 - (v - 400) / (2000 - 400)) * (H - T - B);
+  const path = (vals, y) => vals.map((v, i) => (i ? "L" : "M") + xm(i * 10).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
+  const at = (arr, m) => { const i = Math.min(m / 10, arr.length - 1), lo = Math.floor(i), hi = Math.min(lo + 1, arr.length - 1); return arr[lo] + (arr[hi] - arr[lo]) * (i - lo); };
+  const clock = m => { const t = (22 * 60 + Math.round(m)) % 1440; return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); };
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="reveal"><rect id="reveal-rect" x="0" y="0" width="${W}" height="${H}"/></clipPath></defs>`;
+  for (const v of [40, 60, 80]) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${yN(v)}" y2="${yN(v)}"/><text x="${L - 8}" y="${yN(v) + 4}" text-anchor="end">${v}</text>`;
+  for (const v of [800, 1200, 1600]) svg += `<text x="${W - R + 8}" y="${yC(v) + 4}">${v}</text>`;
+  svg += `<text x="${L - 8}" y="${T + 2}" text-anchor="end">dB</text><text x="${W - R + 8}" y="${T + 2}">ppm</text>`;
+  for (let m = 0; m <= END; m += 60) svg += `<text x="${xm(m)}" y="${H - 6}" text-anchor="middle">${clock(m)}</text>`;
+  svg += `<line class="limit" x1="${L}" x2="${W - R}" y1="${yN(60)}" y2="${yN(60)}"/>`;
+  svg += `<g clip-path="url(#reveal)"><path class="noise-area" d="${path(noise, yN)} L ${xm(END)} ${H - B} L ${xm(0)} ${H - B} Z"/><path class="co2-line" d="${path(co2, yC)}"/><path class="noise-line" d="${path(noise, yN)}"/></g>`;
+  svg += `<g class="nudge" id="nudge" style="opacity:0"><line class="nudge-line" x1="${xm(NUDGE)}" x2="${xm(NUDGE)}" y1="${T}" y2="${H - B}"/><text class="nudge-text" x="${xm(NUDGE) - 6}" y="${T + 10}" text-anchor="end">01:02 screen asks</text></g>`;
+  svg += `<line class="playhead" id="playhead" y1="${T}" y2="${H - B}"/><circle class="playdot" id="playdot" r="4.5"/></svg>`;
+  const chart = document.getElementById("chart");
+  chart.innerHTML = svg;
+  chart.setAttribute("role", "img");
+  chart.setAttribute("aria-label", "Example night from 22:00 to 03:00: noise stays near 40 dB, passes the 60 dB limit at 01:00, the screen asks guests to turn it down at 01:02, and noise falls back under the limit within minutes. CO2 climbs from 620 to about 1,050 ppm and slowly falls.");
+
+  const $ = id => document.getElementById(id);
+  const steps = [...document.querySelectorAll(".story-step")];
+  const times = steps.map(el => Number(el.dataset.t));
+  const phone = $("phone");
+  const screen = guestScreen($("story-screen"), $("story-rig"));
+  document.documentElement.classList.add("js-story");
+
+  const stage = document.querySelector(".story-stage");
+  const stacked = matchMedia("(max-width: 900px)");
+  function timeNow() {
+    // On phones the stage sticks to the top, so read from the middle of the space below it.
+    const top = stacked.matches ? Math.max(0, stage.getBoundingClientRect().bottom) : 0;
+    const c = top + (innerHeight - top) / 2;
+    const centers = steps.map(el => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
+    let active = 0;
+    centers.forEach((y, i) => { if (Math.abs(y - c) < Math.abs(centers[active] - c)) active = i; });
+    let t;
+    if (c <= centers[0]) t = times[0];
+    else if (c >= centers[centers.length - 1]) t = times[times.length - 1];
+    else {
+      let i = 0; while (centers[i + 1] < c) i++;
+      // Hold the time still near each step and move it in between, so the screen matches the text being read.
+      const f = Math.min(1, Math.max(0, ((c - centers[i]) / (centers[i + 1] - centers[i]) - 0.3) / 0.4));
+      t = times[i] + f * (times[i + 1] - times[i]);
+    }
+    return { t, active };
+  }
+
+  function render() {
+    const { t, active } = timeNow();
+    steps.forEach((el, i) => el.classList.toggle("active", i === active));
+    const n = at(noise, t), c = at(co2, t), x = xm(t);
+    const asking = t >= NUDGE && n >= LIMIT, calmed = t >= NUDGE && !asking;
+    $("reveal-rect").setAttribute("width", x);
+    $("playhead").setAttribute("x1", x); $("playhead").setAttribute("x2", x);
+    $("playdot").setAttribute("cx", x); $("playdot").setAttribute("cy", yN(n));
+    $("nudge").style.opacity = t >= NUDGE ? 1 : 0;
+    screen({ m: 1320 + t, noise: n, co2: c, asking });
+    if (asking) {
+      phone.dataset.state = "countdown";
+      $("phone-text").textContent = `an alert in ${Math.ceil(ALERT - t)} min if it carries on`;
+    } else {
+      phone.dataset.state = "silent";
+      $("phone-text").textContent = calmed ? "silent. No alert needed." : "silent";
+    }
+  }
+  let queued = false;
+  const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; render(); }); } };
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", onScroll);
+  render();
+})();
+
+// ---------------- sign-up ----------------
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+for (const form of document.querySelectorAll("form.signup")) {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const source = form.dataset.source;
+    const status = document.getElementById("status-" + source);
+    const button = document.getElementById("submit-" + source);
+    const email = form.elements.email.value.trim();
+    const units = form.elements.units.value;
+    status.className = "status";
+
+    if (!EMAIL_RE.test(email)) {
+      status.textContent = "Enter an email address like name@example.com.";
+      status.classList.add("error");
+      form.elements.email.focus();
+      return;
+    }
+    if (!units) {
+      status.textContent = "Choose how many rentals you manage.";
+      status.classList.add("error");
+      form.elements.units.focus();
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Joining…";
+    try {
+      if (SIGNUP_ENDPOINT) {
+        const body = new URLSearchParams({ email, units, source, website: form.elements.website.value, page: location.hostname });
+        // Apps Script web apps answer with a redirect that browsers cannot read cross-origin;
+        // no-cors still delivers the row, so treat a sent request as success.
+        await fetch(SIGNUP_ENDPOINT, { method: "POST", mode: "no-cors", body });
+      }
+      const done = document.createElement("div");
+      done.className = "done";
+      done.setAttribute("role", "status");
+      done.innerHTML = "<h3>You're on the list.</h3><p class=\"fine\"></p>";
+      done.querySelector("p").textContent = SIGNUP_ENDPOINT
+        ? `We'll email ${email} when Stillroom is ready to order.`
+        : `Preview mode: ${email} was not saved. Add the sign-up URL to collect real sign-ups.`;
+      form.replaceWith(done);
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = "Join the waitlist";
+      status.textContent = "Could not reach the sign-up service. Check your connection and try again.";
+      status.classList.add("error");
+    }
+  });
+}
+</script>
