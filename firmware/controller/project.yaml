@@ -203,7 +203,7 @@ code:
     }
 
     static void bleSetup() {
-      g_rxQueue = xQueueCreate(8192, 1);
+      g_rxQueue = xQueueCreate(16384, 1);
       uint64_t mac = ESP.getEfuseMac();
       char name[20];
       snprintf(name, sizeof(name), "Claude-AC%02X%02X", (uint8_t)(mac >> 32), (uint8_t)(mac >> 40));
@@ -223,8 +223,29 @@ code:
       BLEDevice::startAdvertising();
     }
 
+    // Debug: copy every line from the Claude app to USB as a log event, so
+    // `atech monitor --key ble_rx` shows what the app sends. Toggle with `atech send ble_debug 0|1`.
+    static bool g_bleDebug = true;
+    static void debugLine(const char* key, const String& text) {
+      if (!g_bleDebug) return;
+      String v;
+      size_t n = text.length() < 3000 ? text.length() : 3000;
+      for (size_t i = 0; i < n; i++) {
+        char c = text[i];
+        if (c == '"' || c == '\\') { v += '\\'; v += c; }
+        else if ((uint8_t)c < 0x20) v += ' ';
+        else v += c;
+      }
+      Serial.print("{\"type\":\"event\",\"payload\":{\"event_type\":\"log\",\"key\":\"");
+      Serial.print(key);
+      Serial.print("\",\"value\":\"");
+      Serial.print(v);
+      Serial.println("\"}}");
+    }
+
     // One line from the app: a command, a heartbeat snapshot, or something we ignore.
     static void handleBuddyLine(const String& line) {
+      debugLine("ble_rx", line);
       if (line.indexOf("\"evt\":") >= 0 || line.indexOf("\"time\":") >= 0) return;
 
       String cmd = jStr(line, "cmd");
@@ -274,6 +295,11 @@ code:
         next.state = "needs_input";
         next.summary = tool;
         if (hint.length()) next.summary += ": " + hint;
+      } else if (waiting > 0) {
+        // Waiting on a prompt the snapshot did not describe: still needs you,
+        // but the buttons cannot answer it (no prompt id).
+        next.state = "needs_input";
+        next.summary = msg.length() ? msg : String("Answer in the Claude app");
       } else if (running > 0) {
         next.state = "working";
         next.summary = msg;
@@ -281,6 +307,9 @@ code:
         next.state = "idle";
         next.summary = msg;
       }
+
+      debugLine("ble_parsed", "total=" + String(total) + " running=" + String(running) + " waiting=" + String(waiting) +
+                " id=" + id + " tool=" + tool + " state=" + next.state);
 
       bool newPrompt = id.length() && id != g_promptId;
       g_promptId = id;
@@ -389,7 +418,8 @@ code:
         g_rxLine = "";
         g_rxOverflow = false;
       } else if (b != '\r') {
-        if (g_rxLine.length() < 4096) g_rxLine += (char)b; else g_rxOverflow = true;
+        if (g_rxLine.length() < 16384) g_rxLine += (char)b;
+        else if (!g_rxOverflow) { g_rxOverflow = true; debugLine("ble_overflow", "line over 16384 bytes dropped"); }
       }
     }
     if (g_bleConnected != g_bleWasConnected) { g_bleWasConnected = g_bleConnected; g_redraw = true; }
@@ -421,6 +451,9 @@ code:
     } else if (atech_action == "clear_session") {
       g_usb.active = false;
       g_redraw = true;
+      atechDone();
+    } else if (atech_action == "ble_debug") {
+      g_bleDebug = atechTruthy(atech_value);
       atechDone();
     }
 
