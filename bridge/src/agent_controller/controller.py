@@ -54,6 +54,8 @@ class Controller:
         self._lit: dict[int, dict[str, int]] = {}
         self._shown: Optional[dict] = None
         self._shown_cleared = False
+        self._selected: Optional[tuple[Agent, str]] = None  # picked with the knob; None = top of queue
+        self._knob_last = 0
 
     # ---------- inputs ----------
 
@@ -63,6 +65,8 @@ class Controller:
             key = (event.agent, event.session_id)
             if ended:
                 self._sessions.pop(key, None)
+                if self._selected == key:
+                    self._selected = None
                 slot = self._slots.pop(key, None)
                 if slot is not None:
                     self._set_light(slot, STATE_COLORS[SessionState.IDLE])
@@ -92,6 +96,9 @@ class Controller:
                 session = Session(event.agent, event.session_id, since=event.at)
                 self._sessions[key] = session
             session.apply(event)
+            picked = self._sessions.get(self._selected) if self._selected else None
+            if picked is None or picked.state != SessionState.NEEDS_INPUT:
+                self._selected = None  # jump to the queue's top, where a new request lands
             self._refresh()
             self._play(CHIRP)
 
@@ -113,13 +120,33 @@ class Controller:
     def on_button(self, button: str) -> Optional[int]:
         """approve / deny pressed: answer the request on screen. Returns its id, or None."""
         with self._lock:
-            pending = self._top_pending()
+            pending = self._shown_pending()
             if pending is None or pending.decision is not None:
                 return None
             pending.decision = "allow" if button == "approve" else "deny"
             pending.done.set()
+            self._selected = None  # back to the top of the queue for the next one
             self._play(APPROVED_TUNE if pending.decision == "allow" else DENIED_TUNE)
             return pending.id
+
+    def on_knob(self, position: int) -> None:
+        """The knob turned: show the next (or previous) session in the queue."""
+        with self._lock:
+            step = (position > self._knob_last) - (position < self._knob_last)
+            self._knob_last = position
+            queue = self._queue()
+            if not step or not queue:
+                return
+            index = self._shown_index(queue)
+            nxt = queue[(index + step) % len(queue)]
+            self._selected = (nxt.agent, nxt.session_id)
+            self._refresh()
+
+    def on_knob_press(self) -> None:
+        """Knob pushed: back to what needs you most."""
+        with self._lock:
+            self._selected = None
+            self._refresh()
 
     def start(self) -> None:
         """Draw the current state (the idle screen when nothing is running)."""
@@ -146,12 +173,21 @@ class Controller:
     def _has_pending(self, key: tuple[Agent, str]) -> bool:
         return any(p.key == key and p.decision is None for p in self._pending.values())
 
-    def _top_pending(self) -> Optional[_Pending]:
+    def _shown_index(self, queue: list[Session]) -> int:
+        if self._selected is not None:
+            for i, s in enumerate(queue):
+                if (s.agent, s.session_id) == self._selected:
+                    return i
+            self._selected = None  # it left the queue
+        return 0
+
+    def _shown_pending(self) -> Optional[_Pending]:
         queue = self._queue()
         if not queue:
             return None
-        top = (queue[0].agent, queue[0].session_id)
-        waiting = [p for p in self._pending.values() if p.key == top and p.decision is None]
+        shown = queue[self._shown_index(queue)]
+        key = (shown.agent, shown.session_id)
+        waiting = [p for p in self._pending.values() if p.key == key and p.decision is None]
         return min(waiting, key=lambda p: p.id) if waiting else None
 
     # ---------- board ----------
@@ -160,7 +196,9 @@ class Controller:
         queue = self._queue()
         # Screen: the top of the queue.
         if queue:
-            payload = screen_payload(queue[0], 1, len(queue))
+            index = self._shown_index(queue)
+            payload = screen_payload(queue[index], index + 1, len(queue))
+            payload["focus"] = 1 if self._selected is not None else 0
             if payload != self._shown:
                 if self._call("show_session", payload):
                     self._shown, self._shown_cleared = payload, False

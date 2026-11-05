@@ -19,7 +19,7 @@ Defined in [`firmware/controller/project.yaml`](../firmware/controller/project.y
 | 9 | Light grid 3×3 (`neopixel`) | `status` | Small Kit | One LED per session: 0–7 from the bridge, 8 for the Claude app |
 | 10 | Button (`button`) | `deny` | Small Kit | Deny the selected request |
 | 11 | free | | | |
-| 13–14 | free | | | Room for a knob (`rotary_encoder`) to scroll the queue |
+| 13–14 | Knob (`rotary_encoder`) | `knob` | Add-on | Turn: move through waiting requests. Push: back to the top. Ring: place in queue, in the state's colour |
 | 8 | USB-C | | | Power and data. Not in `project.yaml` |
 
 That leaves port 11 and the double port 13–14 free.

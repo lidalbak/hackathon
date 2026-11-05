@@ -82,6 +82,7 @@ def test_approve_button_allows_the_request(bridge):
         "summary": "Run: mkdir buddy-test",
         "pos": 1,
         "total": 1,
+        "focus": 0,
     }
     assert ("speaker_play_rtttl", "chirp:d=16,o=6,b=180:c,e,g") in board.calls
 
@@ -156,3 +157,50 @@ def test_settings_snippet_points_at_the_hook():
     assert entry["matcher"] == "*"
     assert entry["hooks"][0] == {"type": "command", "command": "/venv/bin/agent-controller hook claude", "timeout": 75}
     assert set(hooks) == {"PermissionRequest", "PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "SessionStart", "SessionEnd"}
+
+
+def test_knob_moves_through_waiting_requests_and_buttons_answer_the_shown_one():
+    board = FakeBoard()
+    controller = Controller(board)
+    results = {}
+
+    def ask(session, command):
+        results[session] = controller.request_permission(
+            AgentEvent(Agent.CLAUDE_CODE, session, SessionState.NEEDS_INPUT, summary=command, project=session), timeout=3
+        )
+
+    threads = []
+    for session, command in [("a", "Run: one"), ("b", "Run: two"), ("c", "Run: three")]:
+        t = threading.Thread(target=ask, args=(session, command))
+        t.start()
+        threads.append(t)
+        time.sleep(0.05)
+
+    shown = board.last("show_session")
+    assert (shown["summary"], shown["pos"], shown["total"], shown["focus"]) == ("Run: one", 1, 3, 0)
+
+    controller.on_knob(1)  # one click clockwise
+    shown = board.last("show_session")
+    assert (shown["summary"], shown["pos"], shown["focus"]) == ("Run: two", 2, 1)
+
+    controller.on_knob(0)  # one click back
+    assert board.last("show_session")["summary"] == "Run: one"
+    controller.on_knob(-1)  # back past the top wraps to the end
+    assert board.last("show_session")["summary"] == "Run: three"
+
+    controller.on_button("deny")  # answers the one on screen
+    threads[2].join()
+    assert results == {"c": "deny"}
+    shown = board.last("show_session")
+    assert (shown["summary"], shown["focus"]) == ("Run: one", 0)  # back to the top
+
+    controller.on_knob(0)  # two clicks clockwise
+    controller.on_knob(1)
+    controller.on_knob_press()  # push: back to the top
+    assert board.last("show_session")["summary"] == "Run: one"
+
+    controller.on_button("approve")
+    threads[0].join()
+    controller.on_button("approve")
+    threads[1].join()
+    assert results == {"c": "deny", "a": "allow", "b": "allow"}

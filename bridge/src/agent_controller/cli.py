@@ -84,8 +84,12 @@ def serve(port: int, board_port: str | None, wait: float) -> int:
     server = make_server(controller, port=port, wait_seconds=wait)
 
     def buttons() -> None:
-        for event in board.events(keys=["approve", "deny"]):
-            if event.value == 1:
+        for event in board.events(keys=["approve", "deny", "knob", "knob_btn"]):
+            if event.key == "knob":
+                controller.on_knob(int(event.value))
+            elif event.key == "knob_btn" and event.value == 1:
+                controller.on_knob_press()
+            elif event.value == 1:
                 answered = controller.on_button(event.key)
                 log.info("%s pressed%s", event.key, f" -> request {answered}" if answered else " (nothing waiting)")
 

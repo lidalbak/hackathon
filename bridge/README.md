@@ -26,6 +26,8 @@ What the hooks do:
 | `PermissionRequest` | Screen shows the request, the board chirps. Left button allows, right button denies. No press within 60 s (`--wait`): Claude Code asks in the app as usual |
 | `UserPromptSubmit`, `PreToolUse`, `PostToolUse` | Working, with the prompt or the tool |
 | `Stop` | Done, your turn |
+
+With several sessions, **turn the knob** to move through them (the screen shows `2/3`, the ring shows where you are). The buttons answer the one on screen. **Push the knob** to jump back to what needs you most. A new request jumps to the top unless you are already looking at one that waits.
 | `SessionStart` / `SessionEnd` | Session added / removed |
 
 The hook never breaks Claude Code: if the bridge is not running it exits at once with no output.

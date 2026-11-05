@@ -10,11 +10,14 @@
 #    then Developer > Open Hardware Buddy... > Connect > pick "Claude-AC...".
 #
 # 2. The PC bridge, over USB (Codex and other agents). Actions:
-#      show_session  {"agent","project","state","summary","pos","total"}
+#      show_session  {"agent","project","state","summary","pos","total","focus"}
+#                    focus=1: the user picked this one with the knob; show it even if the
+#                    Claude app has something more urgent over Bluetooth
 #      clear_session
 #      status_pixel / status_fill / status_clear  (light grid, slots 0-7)
 #      speaker_play_rtttl
-#    Events: approve / deny (1 = press, 0 = release).
+#    Events: approve / deny (1 = press, 0 = release), knob (position), knob_btn (press).
+#    The bridge uses the knob to move through the queue; the ring shows where you are.
 #
 # Light grid: slots 0-7 belong to the bridge, slot 8 (bottom right) shows the Claude app.
 # Text on the screen is ASCII only: the font has no æøå.
@@ -32,7 +35,8 @@ modules:
   - {id: button,          instance: approve,  port: 7}         # Small Kit
   - {id: neopixel,        instance: status,   port: 9}         # Small Kit
   - {id: button,          instance: deny,     port: 10}        # Small Kit
-  # Port 11 is free. Ports 13-14 are kept free for a rotary_encoder (scroll the request queue).
+  - {id: rotary_encoder,  instance: knob,     ports: [13, 14]} # turn: move through the queue
+  # Port 11 is free.
 
 code:
   globals: |
@@ -51,6 +55,7 @@ code:
       String summary;        // what the agent wants
       long pos = 0, total = 0;
       bool answerable = true;   // can the buttons answer it? (Claude app: only with a prompt id)
+      bool focus = false;       // picked with the knob: wins over the Claude app
       uint32_t changedAt = 0;
     };
     static ScreenSession g_usb;      // from the bridge over USB
@@ -95,6 +100,7 @@ code:
       ScreenSession* b = g_usb.active ? &g_usb : nullptr;
       if (!a) return b;
       if (!b) return a;
+      if (b->focus) return b;
       int ra = stateRank(a->state), rb = stateRank(b->state);
       if (ra != rb) return ra < rb ? a : b;
       return b;
@@ -418,7 +424,9 @@ code:
         screen.fillRect(0, H - hintH, w, hintH, ATECH_PANEL);
         screen.setTextColor(ATECH_FG);
         screen.setCursor(4, H - hintH + 3);
-        screen.print(s->answerable ? "L: approve   R: deny" : "Answer in the Claude app");
+        if (!s->answerable) screen.print("Answer in the Claude app");
+        else if (s->total > 1) screen.print("L ok  R deny  Turn: next");
+        else screen.print("L: approve   R: deny");
       }
       const int16_t textY = rowY + 12;
       atech::drawWrappedText(screen, s->summary, 0, 4, textY, w - 8, H - hintH - textY);
@@ -434,10 +442,20 @@ code:
       ScreenSession* s = shown();
       if (s && s->state == "needs_input" && s->answerable) { approve.setColor(0, 255, 0); deny.setColor(255, 0, 0); }
       else { approve.off(); deny.off(); }
+      // Knob ring: the shown session's colour, at its place in the queue.
+      if (!s) { knob.enableRing(false); return; }
+      stateRgb(s->state, r, g, b);
+      if (!r && !g && !b) { r = g = b = 40; }   // idle: dim white
+      knob.enableRing(true);
+      knob.setRingColor(r, g, b);
+      float total = s->total > 1 ? (float)s->total : 1.0f;
+      knob.setRingPosition(s->total > 1 ? (s->pos - 1) * 12.0f / total : 0.0f);
     }
 
   setup: |
     bleSetup();
+    knob.setAcceleration(false, 1);   // one step per detent: one request per click
+    knob.enableRing(false);
 
   loop: |
     // ---- bytes from the Claude app -> lines ----
@@ -470,6 +488,7 @@ code:
       next.summary = atechJsonString(atech_value, "summary");
       next.pos     = atechNum(atech_value, "pos", 0);
       next.total   = atechNum(atech_value, "total", 0);
+      next.focus   = atechNum(atech_value, "focus", 0) == 1;
       next.changedAt = millis();
       if (!next.agent.length() || !next.state.length()) {
         atechFail("show_session needs agent and state");
