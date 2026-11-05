@@ -1,0 +1,95 @@
+# stay-agent
+
+The agent behind the Airbnb stay sensor. The device ([`firmware/stay_sensor`](../firmware/stay_sensor))
+posts its readings over Wi-Fi; the agent decides what they mean, messages the guest,
+escalates to the owner, orders cleaning after check-out and drafts the stay report and
+the review of the guest.
+
+```mermaid
+flowchart LR
+    D[Stay sensor<br/>power only] -- "POST /api/readings every 5 s" --> S[stay-agent<br/>laptop or cloud]
+    S -- "reply: what to show" --> D
+    R[Airbnb replica] -- "GET /api/bookings" --> S
+    S -- "guest messages" --> R
+    S -- "alerts" --> O[Owner webhook]
+    S -- "after check-out" --> C[Cleaning webhook]
+    S -- "messages, reports" --> CL[Claude via Pydantic AI]
+```
+
+**Code decides, Claude writes.** Whether a reading is a problem, when to remind and
+when to call the owner are the host's rules, in plain code ([rules.py](src/stay_agent/rules.py),
+[harness.py](src/stay_agent/harness.py)). Claude, through Pydantic AI with structured
+output, writes the guest messages, owner alerts, the post-stay report and the review
+draft ([llm.py](src/stay_agent/llm.py)). Every one of those falls back to a template if
+Claude can't be reached or declines, so a guest always gets a message. The report's
+numbers are computed by code; Claude only words them.
+
+## Install
+
+```bash
+pip install -e "./stay_agent[dev]"          # Python 3.10+
+export ANTHROPIC_API_KEY=...                # or `ant auth login`; without it, templates are used
+```
+
+## Try it without the device
+
+A whole stay in seconds, one reading per simulated minute:
+
+```bash
+stay-agent simulate party        # loud 22:40-00:10: 3 messages, then the owner is contacted
+stay-agent simulate all          # party, moved sensor, open window, long showers
+stay-agent simulate quiet --no-claude
+```
+
+Each run prints the guest messages, owner alerts, the cleaning order, the stay report
+and the review draft, and writes the report to `reports/<booking-id>.json`.
+
+## Demo with the device
+
+```bash
+stay-agent serve --config config.demo.json      # prints the URL the device should use
+stay-agent setup-device --ssid "<wifi>" --password "<password>" \
+    --server http://<printed-ip>:8080 --token change-me     # once, board on USB
+```
+
+Then unplug USB and power the board from a charger: it joins Wi-Fi and starts posting.
+`config.demo.json` uses 30 s durations instead of 10-30 min, so clapping or playing
+music near the sensor triggers a message within a minute. The laptop and the board must
+be on the same Wi-Fi (a phone hotspot works).
+
+## In the cloud
+
+Same program: run `stay-agent serve` on any host with a public HTTPS URL, set
+`device_token`, and give the device that URL with `setup-device`. Nothing in the device
+changes. Set `ANTHROPIC_API_KEY` in the host's environment.
+
+## Settings
+
+[`config.example.json`](config.example.json) lists everything: property and owner
+name, house rules, limits (dB, °C, %RH and how long), the reminder and escalation
+policy, and where things go. Leave `replica_url`, `owner_webhook` and
+`cleaning_webhook` empty to print to the console instead.
+
+## What the Airbnb replica needs to serve
+
+| Endpoint | Body |
+|---|---|
+| `GET {replica_url}/api/bookings` | `[{"id", "guest_name", "guests", "check_in", "check_out", "language"}]`, times ISO 8601 (local time if no offset) |
+| `POST {replica_url}/api/bookings/{id}/messages` | receives `{"sender": "host", "text": "..."}` |
+
+And what the agent serves to the replica's pages:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/state` | current booking, latest reading, open and past incidents, messages, stats |
+| `GET /api/reports/{booking_id}` | the post-stay report with the review draft, after check-out |
+
+## Notes
+
+- Model: `claude-opus-5-5` (change `model` in the settings). Guest messages and alerts
+  run at low effort, reports at medium.
+- `anthropic` is pinned below 2: anthropic 2.x changed a message type that pydantic-ai
+  2.54 still constructs the old way.
+- Server-side refusal fallbacks are not enabled: pydantic-ai 2.54 can't parse the
+  fallback block they add to a response. A refusal falls back to the template instead.
+- Tests: `pytest stay_agent` (no API calls; Pydantic AI's `TestModel` stands in for Claude).

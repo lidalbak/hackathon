@@ -1,0 +1,34 @@
+{
+  "property_name": "Fjordview apartment",
+  "owner_name": "Simen",
+  "house_rules": "Quiet hours 22:00-08:00. No parties or events. No more guests than booked.",
+  "timezone": "Europe/Oslo",
+  "model": "claude-opus-5-5",
+  "use_claude": true,
+  "device_token": "change-me",
+  "replica_url": "",
+  "bookings_file": "bookings.example.json",
+  "owner_webhook": "",
+  "cleaning_webhook": "",
+  "reports_dir": "reports",
+  "limits": {
+    "noise_db": 75,
+    "quiet_noise_db": 65,
+    "noise_minutes": 10,
+    "quiet_start": "22:00",
+    "quiet_end": "08:00",
+    "temp_high": 28,
+    "temp_low": 12,
+    "temp_minutes": 15,
+    "humidity": 70,
+    "humidity_minutes": 30,
+    "clear_minutes": 5,
+    "offline_seconds": 60
+  },
+  "policy": {
+    "reminder_minutes": 15,
+    "escalate_after": 3,
+    "escalate_window_minutes": 60,
+    "escalate_tamper": true
+  }
+}

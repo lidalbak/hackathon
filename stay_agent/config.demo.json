@@ -1,0 +1,9 @@
+{
+  "property_name": "Fjordview apartment",
+  "owner_name": "Simen",
+  "device_token": "change-me",
+  "bookings_file": "bookings.example.json",
+  "limits": {"noise_db": 72, "quiet_noise_db": 72, "noise_minutes": 0.5, "clear_minutes": 0.5,
+             "temp_minutes": 0.5, "humidity_minutes": 0.5, "offline_seconds": 30},
+  "policy": {"reminder_minutes": 0.5, "escalate_after": 3, "escalate_window_minutes": 10}
+}
