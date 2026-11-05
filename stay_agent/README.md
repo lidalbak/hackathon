@@ -57,8 +57,10 @@ there and nothing else. Off with `"answer_guests": false`.
 
 ```bash
 python -m airbnb_chat                                    # http://127.0.0.1:8766/hosting/messages
+# The demo uses Emma's seeded stay at "Cozy loft near Bryggen" (conversation 1).
+# Make Simen her host (local data only; POST /api/reset puts Alex back):
+curl -X PATCH localhost:8766/api/conversations/1 -H 'Content-Type: application/json' -d '{"host": {"name": "Simen"}}'
 cd stay_agent
-stay-agent replica-stay --config config.demo.json --guest Anna
 stay-agent serve --config config.demo.json --usb         # board on USB-C; close `atech monitor` first
 ```
 
