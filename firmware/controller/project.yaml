@@ -50,6 +50,7 @@ code:
       String state;          // needs_input | error | done | working | idle
       String summary;        // what the agent wants
       long pos = 0, total = 0;
+      bool answerable = true;   // can the buttons answer it? (Claude app: only with a prompt id)
       uint32_t changedAt = 0;
     };
     static ScreenSession g_usb;      // from the bridge over USB
@@ -313,6 +314,7 @@ code:
 
       ScreenSession next;
       next.active = total > 0 || id.length();
+      next.answerable = id.length() > 0;
       next.agent = "Claude";
       next.project = String(total) + (total == 1 ? " session" : " sessions");
       if (waiting > 1) next.project += ", " + String(waiting) + " waiting";
@@ -342,7 +344,8 @@ code:
       if (newPrompt) speaker.playRTTTL("chirp:d=16,o=6,b=180:c,e,g");
 
       if (next.active != g_claude.active || next.state != g_claude.state ||
-          next.summary != g_claude.summary || next.project != g_claude.project) {
+          next.summary != g_claude.summary || next.project != g_claude.project ||
+          next.answerable != g_claude.answerable) {
         next.changedAt = millis();
         g_claude = next;
         g_redraw = true;
@@ -413,7 +416,7 @@ code:
         screen.fillRect(0, H - hintH, w, hintH, ATECH_PANEL);
         screen.setTextColor(ATECH_FG);
         screen.setCursor(4, H - hintH + 3);
-        screen.print("L: approve   R: deny");
+        screen.print(s->answerable ? "L: approve   R: deny" : "Answer in the Claude app");
       }
       const int16_t textY = rowY + 12;
       atech::drawWrappedText(screen, s->summary, 0, 4, textY, w - 8, H - hintH - textY);
@@ -427,7 +430,7 @@ code:
       status.setPixel(8, r, g, b);
       status.show();
       ScreenSession* s = shown();
-      if (s && s->state == "needs_input") { approve.setColor(0, 255, 0); deny.setColor(255, 0, 0); }
+      if (s && s->state == "needs_input" && s->answerable) { approve.setColor(0, 255, 0); deny.setColor(255, 0, 0); }
       else { approve.off(); deny.off(); }
     }
 
@@ -486,7 +489,7 @@ code:
     // (The bridge also receives every press as an approve / deny event over USB.)
     bool approvePressed = approve.wasPressed();
     bool denyPressed = deny.wasPressed();
-    if (shown() == &g_claude && g_claude.state == "needs_input") {
+    if (shown() == &g_claude && g_claude.state == "needs_input" && g_claude.answerable) {
       if (approvePressed) answerClaude(true);
       else if (denyPressed) answerClaude(false);
     }
