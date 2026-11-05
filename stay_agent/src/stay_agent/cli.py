@@ -10,7 +10,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from stay_agent.channels import StaticBookings, channels_from_settings, create_replica_stay
+from stay_agent.channels import ReplicaGuest, StaticBookings, channels_from_settings, create_replica_stay
 from stay_agent.config import Settings
 from stay_agent.harness import Inline, StayHarness, Worker
 from stay_agent.llm import Writer
@@ -60,6 +60,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
     bookings, guest, owner, cleaning = channels_from_settings(settings)
     harness = StayHarness(settings, Writer(settings), bookings, guest, owner, cleaning, executor=Worker())
     server = make_server(harness, args.port)
+    if settings.replica_url and settings.answer_guests:
+        from stay_agent.replies import InboxWatcher
+
+        InboxWatcher(harness, owner, ReplicaGuest(settings).send_to).start()
+        print("Answering guests who write in the Airbnb copy")
     print(f"stay-agent listening on port {args.port}")
     print(f"Claude: {claude_status(settings)}")
     try:

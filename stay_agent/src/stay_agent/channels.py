@@ -157,11 +157,26 @@ class ReplicaGuest:
         self.base_url, self.token, self.typing = s.replica_url.rstrip("/"), s.replica_token, s.typing_seconds
 
     def send(self, booking: Booking, text: str) -> None:
-        conv = f"{self.base_url}/api/conversations/{booking.id}"
+        self.send_to(booking.id, text)
+
+    def send_to(self, conversation_id: str | int, text: str) -> None:
+        conv = f"{self.base_url}/api/conversations/{conversation_id}"
         if self.typing:
             _http("POST", f"{conv}/typing", {"sender": "host", "typing": True}, token=self.token)
             time.sleep(self.typing)
         _http("POST", f"{conv}/messages", {"sender": "host", "text": text}, token=self.token)
+
+
+def replica_conversations(s: Settings) -> list[dict]:
+    """The owner's host conversations at the watched listing, newest first."""
+    data = _http("GET", f"{s.replica_url.rstrip('/')}/api/conversations?role=host", token=s.replica_token)
+    title = s.listing_title.lower()
+    return [c for c in data["conversations"] if title in (c.get("listing") or {}).get("title", "").lower()]
+
+
+def replica_messages(s: Settings, conversation_id: int) -> list[dict]:
+    data = _http("GET", f"{s.replica_url.rstrip('/')}/api/conversations/{conversation_id}/messages", token=s.replica_token)
+    return data["messages"]
 
 
 class ConsoleOwner:

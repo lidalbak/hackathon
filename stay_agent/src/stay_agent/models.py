@@ -89,6 +89,12 @@ class GuestText(BaseModel):
     text: str = Field(description="The message to the guest, ready to send. 2-4 short sentences.")
 
 
+class GuestReply(BaseModel):
+    text: str = Field(description="The reply to the guest, ready to send.")
+    needs_owner: bool = Field(description="True if the real host must follow up (can't answer, a decision, an emergency).")
+    owner_note: str = Field(description="One line for the host about what the guest needs; empty if needs_owner is false.")
+
+
 class OwnerAlert(BaseModel):
     subject: str = Field(description="One line, under 70 characters.")
     text: str = Field(description="What happened, what has been done, what the owner may want to do.")

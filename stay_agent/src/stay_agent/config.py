@@ -38,6 +38,8 @@ class Settings(BaseModel):
     property_name: str = "the apartment"
     owner_name: str = "your host"
     house_rules: str = "Quiet hours 22:00-08:00. No parties or events. No more guests than booked."
+    property_info: str = ""  # facts the agent may tell guests: check-out, Wi-Fi name, bins, transport...
+    answer_guests: bool = True  # reply when a guest writes in the Airbnb copy
     timezone: str = "Europe/Oslo"
 
     model: str = "claude-opus-5-5"

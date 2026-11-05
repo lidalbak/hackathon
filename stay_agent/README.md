@@ -44,6 +44,15 @@ stay-agent simulate quiet --no-claude
 Each run prints the guest messages, owner alerts, the cleaning order, the stay report
 and the review draft, and writes the report to `reports/<booking-id>.json`.
 
+## Answering guests
+
+When a guest writes in the Airbnb copy, the agent answers as the host (`owner_name`),
+in the first person: Claude gets the chat, the booking, the house rules,
+`property_info` and what the sensor reads now. What only the real host can handle
+(refunds, damage, extra guests, emergencies) gets an "I'll get back to you" and an
+alert to the owner. Put true facts in `property_info`: the agent tells guests what is
+there and nothing else. Off with `"answer_guests": false`.
+
 ## Demo over USB (simplest)
 
 ```bash

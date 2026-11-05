@@ -188,6 +188,25 @@ class StayHarness:
                 self._check_out(self.log.booking, now)
                 self._booking, self._booking_checked = None, now
 
+    def sensor_now(self, booking_id: str) -> Optional[dict]:
+        """What the sensor reads now, if ``booking_id`` is the stay going on; for guest replies."""
+        with self.lock:
+            if self.log.booking is None or self.log.booking.id != booking_id or self.last_reading is None:
+                return None
+            r = self.last_reading
+            return {
+                "sound_db": round(r.db),
+                "temperature_c": r.temp,
+                "humidity_pct": r.hum,
+                "issues_now": [i.detail for i in self.detector.active.values()],
+            }
+
+    def note_sent(self, booking_id: str, message: SentMessage) -> None:
+        """Log a message sent outside the incident flow (a reply to the guest) with its stay."""
+        with self.lock:
+            if self.log.booking is not None and self.log.booking.id == booking_id:
+                self.log.messages.append(message)
+
     def state(self) -> dict:
         """For GET /api/state: what the replica's dashboard shows."""
         with self.lock:
@@ -329,8 +348,7 @@ class StayHarness:
         for inc in escalate or []:
             inc.escalated = True
         stay.owner_alert_times.append(now)
-        owner = self.settings.owner_name
-        self._action = f"{owner[:1].upper()}{owner[1:]} has been contacted"
+        self._action = "Host notified"
         b = stay.booking
         incidents = [i.model_copy() for i in (escalate or stay.incidents[-3:])]
 

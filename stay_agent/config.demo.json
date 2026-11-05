@@ -1,6 +1,7 @@
 {
   "property_name": "Bright studio in Grünerløkka",
-  "owner_name": "Alex",
+  "owner_name": "Simen",
+  "property_info": "Self check-in from 15:00, check-out by 11:00. Wi-Fi network: Grunerlokka-Studio (the password is on the fridge). Bins are in the backyard: paper in the blue one. Tram 11, 12 and 13 stop at Olaf Ryes plass, 2 minutes away. Towels and bed linen are in the hallway cupboard.",
   "device_token": "change-me",
   "replica_url": "http://127.0.0.1:8766",
   "replica_token": "",

@@ -23,6 +23,7 @@ from stay_agent.config import Settings
 from stay_agent.models import (
     Author,
     Booking,
+    GuestReply,
     GuestText,
     Incident,
     IncidentKind,
@@ -38,18 +39,33 @@ log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 GUEST_INSTRUCTIONS = """\
-You write short messages from a short-term rental host's assistant to the current guest,
-about something the apartment's sensor noticed. The sensor measures sound level,
-temperature, humidity and whether it was moved. It never records audio or video; say so
-if the guest might worry about it.
+You are the host of a short-term rental, writing to your current guest in the booking
+platform's chat about something the apartment's sensor noticed (sound level,
+temperature, humidity, or the sensor being moved). Write as the host yourself, in the
+first person, like a friendly person texting, not a company.
 
 - First message about an issue: warm, polite, assume good faith.
-- Reminders: firmer but still respectful. From the third message on, say that the host
-  will be contacted if it continues.
+- Reminders: firmer but still respectful. From the third message on, say that you will
+  have to step in (call or come by) if it continues.
 - Use only the facts given. Never invent numbers, and never claim more than the facts
-  show (a loud room is not proof of a party).
-- Write in the language given. No subject line, no placeholders.
-- Sign off as the host's assistant, using the host's name given."""
+  show (a loud room is not proof of a party). Don't explain how the sensor works.
+- Write in the language given. No subject line, no placeholders. 2-4 short sentences.
+- Sign with the host's first name."""
+
+REPLY_INSTRUCTIONS = """\
+You are the host of a short-term rental, answering your guest in the booking platform's
+chat. Write as the host yourself, in the first person, briefly (1-4 sentences), warm and
+practical, in the language the guest writes in. No signature needed in a chat reply.
+
+- Use only the facts given about the apartment, the booking, the house rules and what
+  the apartment's sensor reads now. Never invent facts such as codes, passwords,
+  addresses, prices or times that are not given.
+- If you can't answer from the facts, or the guest wants something only the real host
+  can decide or do (refunds, damage, extra guests, early check-in, anything broken),
+  say you'll get back to them shortly, and set needs_owner with a one-line note.
+- If the guest reports an emergency (fire, smoke, water leak, break-in, injury), tell
+  them to call 112 right away, and set needs_owner.
+- If the guest is only saying thanks or hello, answer in kind; needs_owner stays false."""
 
 OWNER_INSTRUCTIONS = """\
 You alert the owner of a short-term rental about a problem in their apartment. Be brief
@@ -87,6 +103,7 @@ class Writer:
         self._owner = Agent(model, output_type=NativeOutput(OwnerAlert), instructions=OWNER_INSTRUCTIONS, model_settings=short)
         self._report = Agent(model, output_type=NativeOutput(StayNarrative), instructions=REPORT_INSTRUCTIONS, model_settings=longer)
         self._review = Agent(model, output_type=NativeOutput(ReviewDraft), instructions=REVIEW_INSTRUCTIONS, model_settings=longer)
+        self._reply = Agent(model, output_type=NativeOutput(GuestReply), instructions=REPLY_INSTRUCTIONS, model_settings=short)
 
     def _run(self, agent: Agent[None, T], prompt: str) -> Optional[T]:
         if self.model is None:
@@ -121,6 +138,33 @@ class Writer:
         if out is not None:
             return out.text, "claude"
         return _guest_template(s, booking, incident, attempt), "template"
+
+    def guest_reply(
+        self, guest_name: str, stay: dict, transcript: list[str], sensor_now: Optional[dict]
+    ) -> tuple[GuestReply, Author]:
+        """Answer whatever the guest just wrote. ``transcript`` is the chat, oldest first."""
+        s = self.settings
+        prompt = _facts(
+            property=s.property_name,
+            host=s.owner_name,
+            house_rules=s.house_rules,
+            about_the_apartment=s.property_info,
+            guest=guest_name,
+            stay=stay,
+            sensor_now=sensor_now or "no sensor reading for this stay",
+            chat_so_far=transcript[-20:],
+        )
+        out = self._run(self._reply, prompt)
+        if out is not None:
+            return out, "claude"
+        return (
+            GuestReply(
+                text=f"Thanks for your message, {guest_name}! I'll get back to you shortly. – {s.owner_name}",
+                needs_owner=True,
+                owner_note="Couldn't answer automatically",
+            ),
+            "template",
+        )
 
     # ---- To the owner ---------------------------------------------------------------
 
@@ -191,10 +235,10 @@ def _incident_line(i: Incident) -> str:
 
 
 def _guest_template(s: Settings, b: Booking, i: Incident, attempt: int) -> str:
-    sign = f"– {s.owner_name}'s assistant"
+    sign = f"– {s.owner_name}"
     if i.kind == IncidentKind.NOISE:
         if attempt >= 3:
-            body = f"the noise is still high. Please turn it down now; if it continues, {s.owner_name} will be contacted."
+            body = "the noise is still high. Please turn it down now; if it continues, I'll have to call or come by."
         elif attempt == 2:
             body = "the noise level is still high. Please keep it down so the neighbours can rest."
         else:
@@ -207,10 +251,7 @@ def _guest_template(s: Settings, b: Booking, i: Incident, attempt: int) -> str:
     elif i.kind == IncidentKind.HUMIDITY:
         body = "the humidity is high. Please open a window for a while or use the bathroom fan after showers."
     elif i.kind == IncidentKind.TAMPER:
-        body = (
-            "it looks like the sensor in the living room has been moved. Please put it back where it was. "
-            "It only measures sound level, temperature and humidity; it never records audio or video."
-        )
+        body = "it looks like the sensor in the living room has been moved. Could you put it back where it was? Thanks!"
     else:
         body = "we noticed something in the apartment and wanted to check that everything is fine."
     return f"Hi {b.guest_name}, {body} {sign}"
