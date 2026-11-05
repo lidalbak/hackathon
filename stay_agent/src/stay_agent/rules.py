@@ -82,7 +82,9 @@ class Detector:
                 lambda rs, _: f"humidity {_avg(rs, 'hum'):.0f} % for {lim.humidity_minutes:g} min (limit {lim.humidity:g} %)",
             ),
         ]
-        self._keep = timedelta(minutes=max(r.minutes for r in self.rules))
+        # Keep a margin beyond the longest rule: otherwise the oldest reading kept is always
+        # a little newer than the window start, and no rule has ever "watched long enough".
+        self._keep = timedelta(minutes=max(r.minutes for r in self.rules) + 2)
 
     def quiet(self, at: datetime) -> bool:
         return in_quiet_hours(at.time(), self.limits.quiet_start, self.limits.quiet_end)

@@ -45,7 +45,12 @@ class Settings(BaseModel):
 
     device_token: str = ""  # must match the token stored on the device; empty accepts any device
 
-    replica_url: str = ""  # Airbnb replica base URL; empty prints guest messages instead
+    replica_url: str = ""  # Airbnb copy (airbnb_chat), e.g. http://127.0.0.1:8766; empty prints guest messages
+    replica_token: str = ""  # its CHAT_API_TOKEN, if set
+    listing_title: str = ""  # only stays at listings whose title contains this; empty: every hosted listing
+    check_in_time: time = time(15, 0)  # the replica's reservations have dates only
+    check_out_time: time = time(11, 0)
+    typing_seconds: float = 2  # show "typing..." in the replica before each message
     bookings_file: str = ""  # JSON list of bookings, used when there is no replica
     owner_webhook: str = ""  # POST owner alerts here (Slack-style {"text": ...}); empty prints them
     cleaning_webhook: str = ""  # POST cleaning orders here; empty prints them

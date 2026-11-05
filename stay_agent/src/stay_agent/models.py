@@ -38,12 +38,14 @@ class Reading(BaseModel):
 
 
 class Booking(BaseModel):
-    id: str
+    id: str  # the replica's conversation id: guest messages go to that thread
     guest_name: str
     guests: int = 1
     check_in: datetime
     check_out: datetime
     language: str = "en"  # language for messages to the guest
+    listing: str = ""
+    code: str = ""  # reservation code
 
 
 class IncidentKind(str, Enum):

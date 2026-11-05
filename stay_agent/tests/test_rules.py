@@ -55,3 +55,33 @@ def test_tamper_starts_and_ends_at_once():
 def test_device_missing_sensor_values_become_none():
     r = Reading.model_validate({"at": datetime.now(TZ), "temp": -99, "hum": -1, "db": 40, "db_max": 50})
     assert r.temp is None and r.hum is None
+
+
+def test_confirmed_hosted_stays_become_bookings():
+    from datetime import time
+
+    from stay_agent.channels import booking_from_conversation
+
+    conv = {
+        "id": 7, "my_role": "host", "guest": {"name": "Lukas"},
+        "listing": {"title": "Bright studio in Grünerløkka"},
+        "reservation": {"status": "confirmed", "check_in": "2026-11-07", "check_out": "2026-11-10", "guests": 1, "code": "HM3"},
+    }
+    b = booking_from_conversation(conv, TZ, time(15), time(11))
+    assert b.id == "7" and b.guest_name == "Lukas" and b.code == "HM3"
+    assert b.check_in == datetime(2026, 11, 7, 15, 0, tzinfo=TZ)
+    assert b.check_out == datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    for other in ({"my_role": "guest"}, {"reservation": {**conv["reservation"], "status": "pending"}}):
+        assert booking_from_conversation({**conv, **other}, TZ, time(15), time(11)) is None
+
+
+def test_device_rate_readings_with_short_demo_limits():
+    # 5 s readings, 30 s rules: what the demo config does with the real device
+    d = Detector(Limits(noise_db=72, quiet_noise_db=72, noise_minutes=0.5, clear_minutes=0.5,
+                        temp_minutes=0.5, humidity_minutes=0.5))
+    start = datetime(2026, 11, 5, 18, 0, 0, 300000, tzinfo=TZ)
+    changes = []
+    for i in range(10):
+        r = Reading(at=start + timedelta(seconds=5 * i, milliseconds=37 * i), db=80, db_max=90, temp=21, hum=40)
+        changes += d.feed(r)
+    assert [c.what for c in changes] == ["started"]

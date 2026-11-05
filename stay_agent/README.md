@@ -9,8 +9,8 @@ the review of the guest.
 flowchart LR
     D[Stay sensor<br/>power only] -- "POST /api/readings every 5 s" --> S[stay-agent<br/>laptop or cloud]
     S -- "reply: what to show" --> D
-    R[Airbnb replica] -- "GET /api/bookings" --> S
-    S -- "guest messages" --> R
+    R[Airbnb copy<br/>airbnb_chat] -- "confirmed stays" --> S
+    S -- "guest messages, as the host" --> R
     S -- "alerts" --> O[Owner webhook]
     S -- "after check-out" --> C[Cleaning webhook]
     S -- "messages, reports" --> CL[Claude via Pydantic AI]
@@ -44,18 +44,31 @@ stay-agent simulate quiet --no-claude
 Each run prints the guest messages, owner alerts, the cleaning order, the stay report
 and the review draft, and writes the report to `reports/<booking-id>.json`.
 
-## Demo with the device
+## Demo with the device and the Airbnb copy
+
+Guests are messaged in the Airbnb copy on main ([`airbnb_chat/`](../airbnb_chat),
+API in [docs/airbnb-chat.md](../docs/airbnb-chat.md)): the agent reads confirmed stays
+from the host inbox and writes to the guest as the host, after a moment of "typing…".
 
 ```bash
-stay-agent serve --config config.demo.json      # prints the URL the device should use
+pip install -r airbnb_chat/requirements.txt
+python -m airbnb_chat                                   # http://127.0.0.1:8766/hosting/messages
+
+cd stay_agent
+stay-agent replica-stay --config config.demo.json --guest Anna      # a stay from today
+stay-agent serve --config config.demo.json              # prints the URL the device should use
 stay-agent setup-device --ssid "<wifi>" --password "<password>" \
     --server http://<printed-ip>:8080 --token change-me     # once, board on USB
 ```
 
 Then unplug USB and power the board from a charger: it joins Wi-Fi and starts posting.
+Keep `/hosting/messages` open: messages to the guest appear there live.
 `config.demo.json` uses 30 s durations instead of 10-30 min, so clapping or playing
-music near the sensor triggers a message within a minute. The laptop and the board must
-be on the same Wi-Fi (a phone hotspot works).
+music near the sensor sends a message within a minute. The laptop and the board must be
+on the same Wi-Fi (a phone hotspot works).
+
+Without the device: `stay-agent simulate party --config config.demo.json` creates a
+stay in the Airbnb copy and plays a whole night into it.
 
 ## In the cloud
 
@@ -70,14 +83,17 @@ name, house rules, limits (dB, °C, %RH and how long), the reminder and escalati
 policy, and where things go. Leave `replica_url`, `owner_webhook` and
 `cleaning_webhook` empty to print to the console instead.
 
-## What the Airbnb replica needs to serve
+## How it uses the Airbnb copy
 
-| Endpoint | Body |
+| Call | Why |
 |---|---|
-| `GET {replica_url}/api/bookings` | `[{"id", "guest_name", "guests", "check_in", "check_out", "language"}]`, times ISO 8601 (local time if no offset) |
-| `POST {replica_url}/api/bookings/{id}/messages` | receives `{"sender": "host", "text": "..."}` |
+| `GET /api/conversations?role=host` | Stays: conversations where the owner is host, `reservation.status` is `confirmed`, and the listing title contains `listing_title`. Check-in and check-out are dates; times come from `check_in_time` / `check_out_time` |
+| `POST /api/conversations/{id}/typing`, then `.../messages` | A message to the guest, `{"sender": "host", "text": ...}` |
+| `POST /api/conversations` | `replica-stay` and `simulate`: a confirmed stay from today |
 
-And what the agent serves to the replica's pages:
+Set `replica_token` to the Airbnb copy's `CHAT_API_TOKEN` if it has one.
+
+And what the agent serves, for a dashboard:
 
 | Endpoint | Returns |
 |---|---|

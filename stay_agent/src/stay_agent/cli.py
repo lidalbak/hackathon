@@ -1,4 +1,4 @@
-"""stay-agent: serve | simulate | setup-device"""
+"""stay-agent: serve | simulate | replica-stay | setup-device"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 import socket
 from datetime import datetime
 
-from stay_agent.channels import StaticBookings, channels_from_settings
+from stay_agent.channels import StaticBookings, channels_from_settings, create_replica_stay
 from stay_agent.config import Settings
 from stay_agent.harness import Inline, StayHarness, Worker
 from stay_agent.llm import Writer
@@ -50,6 +50,10 @@ def cmd_simulate(args: argparse.Namespace) -> int:
         settings.use_claude = False
     _, guest, owner, cleaning = channels_from_settings(settings)
     booking = demo_booking(settings.tz, datetime.now(settings.tz).date())
+    if settings.replica_url:  # a real conversation in the Airbnb copy, so the messages show up there
+        conv = create_replica_stay(settings, booking.guest_name, booking.guests)
+        booking = booking.model_copy(update={"id": str(conv)})
+        print(f"Created stay {conv} in the Airbnb copy: {settings.replica_url.rstrip('/')}/hosting/messages/{conv}")
     harness = StayHarness(
         settings, Writer(settings), StaticBookings([booking], settings.tz), guest, owner, cleaning, executor=Inline()
     )
@@ -62,6 +66,18 @@ def cmd_simulate(args: argparse.Namespace) -> int:
             print(f"[{r.at:%H:%M}] device: {reply.level.upper():6} {reply.text}")
             last_level = reply.level
     harness.finish(booking.check_out)
+    return 0
+
+
+def cmd_replica_stay(args: argparse.Namespace) -> int:
+    settings = Settings.load(args.config)
+    if not settings.replica_url:
+        print("Set replica_url in the settings first.")
+        return 1
+    conv = create_replica_stay(settings, args.guest, args.guests, args.nights)
+    print(f"Created a confirmed stay for {args.guest} ({args.guests} guests) from today: conversation {conv}")
+    print(f"Host inbox: {settings.replica_url.rstrip('/')}/hosting/messages/{conv}")
+    print("`stay-agent serve` picks it up within 30 s.")
     return 0
 
 
@@ -95,6 +111,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config")
     p.add_argument("--no-claude", action="store_true")
     p.set_defaults(fn=cmd_simulate)
+
+    p = sub.add_parser("replica-stay", help="create a stay from today in the Airbnb copy, for the demo")
+    p.add_argument("--config", required=True)
+    p.add_argument("--guest", default="Anna")
+    p.add_argument("--guests", type=int, default=2)
+    p.add_argument("--nights", type=int, default=1)
+    p.set_defaults(fn=cmd_replica_stay)
 
     p = sub.add_parser("setup-device", help="store Wi-Fi and server settings on the device over USB")
     p.add_argument("--ssid", required=True)
