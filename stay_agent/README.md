@@ -28,7 +28,7 @@ numbers are computed by code; Claude only words them.
 
 ```bash
 pip install -e "./stay_agent[dev]"          # Python 3.10+
-export ANTHROPIC_API_KEY=...                # or `ant auth login`; without it, templates are used
+cp .env.example .env                        # then put your Claude API key in stay_agent/.env (git-ignored)
 ```
 
 ## Try it without the device

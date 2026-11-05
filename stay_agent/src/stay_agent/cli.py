@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import socket
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from stay_agent.channels import StaticBookings, channels_from_settings, create_replica_stay
 from stay_agent.config import Settings
@@ -14,6 +16,29 @@ from stay_agent.harness import Inline, StayHarness, Worker
 from stay_agent.llm import Writer
 from stay_agent.server import DEFAULT_PORT, make_server
 from stay_agent.simulate import SCENARIOS, demo_booking, readings
+
+
+ENV_FILES = (Path.cwd() / ".env", Path(__file__).resolve().parents[2] / ".env")  # here, or stay_agent/.env
+
+
+def load_env_files() -> None:
+    """KEY=value lines from .env (git-ignored). The real environment wins; empty values are skipped."""
+    for path in dict.fromkeys(ENV_FILES):
+        if not path.is_file():
+            continue
+        for line in path.read_text().splitlines():
+            key, sep, value = line.partition("=")
+            key, value = key.strip(), value.strip().strip("'\"")
+            if sep and key and not key.startswith("#") and value:
+                os.environ.setdefault(key, value)
+
+
+def claude_status(settings: Settings) -> str:
+    if not settings.use_claude:
+        return "off (templates)"
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return f"on, {settings.model} (API key found)"
+    return f"on, {settings.model}, but no API key in stay_agent/.env or the environment: templates until one is set"
 
 
 def lan_ip() -> str:
@@ -36,7 +61,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     harness = StayHarness(settings, Writer(settings), bookings, guest, owner, cleaning, executor=Worker())
     server = make_server(harness, args.port)
     print(f"stay-agent listening on port {args.port}")
-    print(f"Claude: {'on, ' + settings.model if settings.use_claude else 'off (templates)'}")
+    print(f"Claude: {claude_status(settings)}")
     try:
         if args.usb:
             from stay_agent.usb import run_usb
@@ -66,7 +91,7 @@ def cmd_simulate(args: argparse.Namespace) -> int:
         settings, Writer(settings), StaticBookings([booking], settings.tz), guest, owner, cleaning, executor=Inline()
     )
     print(f"Simulating '{args.scenario}': {booking.guest_name}, {booking.check_in:%a %H:%M} to {booking.check_out:%a %H:%M}")
-    print(f"Claude: {'on, ' + settings.model if settings.use_claude else 'off (templates)'}\n")
+    print(f"Claude: {claude_status(settings)}\n")
     last_level = None
     for r in readings(args.scenario, booking):
         reply = harness.ingest(r)
@@ -138,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_setup_device)
 
     args = parser.parse_args(argv)
+    load_env_files()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     for noisy in ("httpx", "anthropic", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

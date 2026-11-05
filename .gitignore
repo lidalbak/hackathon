@@ -18,6 +18,8 @@ dist/
 
 # Local secrets
 .env
+# the Claude API key for stay-agent (template: stay_agent/.env.example)
+stay_agent/.env
 
 # stay-agent output (stay reports with guest names)
 reports/
