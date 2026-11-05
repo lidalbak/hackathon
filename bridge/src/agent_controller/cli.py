@@ -56,7 +56,11 @@ def hook_claude(port: int, wait: float, stdin=sys.stdin, stdout=sys.stdout) -> i
         "summary": event.summary,
         "project": event.project,
     }
-    if payload.get("hook_event_name") == claude.PERMISSION:
+    if payload.get("hook_event_name") == claude.PERMISSION and payload.get("tool_name") in claude.ANSWER_IN_APP:
+        # Show it, but never answer it: "allow" without the user's choice is not an answer.
+        body["summary"] = "In the app: " + body["summary"]
+        _post(port, "/event", body, timeout=1.0)
+    elif payload.get("hook_event_name") == claude.PERMISSION:
         reply = _post(port, "/permission", body, timeout=wait + 5)
         out = claude.decision_output((reply or {}).get("decision"))
         if out:

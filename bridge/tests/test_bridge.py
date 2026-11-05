@@ -204,3 +204,30 @@ def test_knob_moves_through_waiting_requests_and_buttons_answer_the_shown_one():
     controller.on_button("approve")
     threads[1].join()
     assert results == {"c": "deny", "a": "allow", "b": "allow"}
+
+
+def test_multiple_choice_questions_are_shown_but_never_answered(bridge):
+    board, controller, port = bridge
+    payload = {
+        "hook_event_name": "PermissionRequest",
+        "session_id": "q1",
+        "cwd": "/x/demo",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {"questions": [{"question": "Which framework?", "header": "Framework",
+                                      "options": [{"label": "React"}, {"label": "Vue"}], "multiSelect": False}]},
+    }
+    started = time.monotonic()
+    assert run_hook(payload, port, wait=2) == ""  # no decision: the app asks
+    assert time.monotonic() - started < 1.5  # and it does not wait for a button
+    shown = board.last("show_session")
+    assert (shown["state"], shown["summary"]) == ("needs_input", "In the app: Question: Which framework?")
+    assert controller.on_button("approve") is None  # nothing for the buttons to answer
+
+
+def test_plan_approval_is_a_normal_request(bridge):
+    board, controller, port = bridge
+    press_when_waiting(controller, "approve", board)
+    payload = {"hook_event_name": "PermissionRequest", "session_id": "p1", "cwd": "/x/demo",
+               "tool_name": "ExitPlanMode", "tool_input": {"plan": "1. do it"}}
+    out = json.loads(run_hook(payload, port))
+    assert out["hookSpecificOutput"]["decision"]["behavior"] == "allow"

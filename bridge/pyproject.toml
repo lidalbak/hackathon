@@ -1,6 +1,6 @@
 [project]
 name = "agent-controller-bridge"
-version = "0.0.2"
+version = "0.0.3"
 description = "PC bridge between AI coding agents and the Agent Controller board"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -15,6 +15,11 @@ from agent_controller.events import Agent, AgentEvent, SessionState
 PERMISSION = "PermissionRequest"
 ENDED = "SessionEnd"
 
+# Tools where "allow" is not an answer: Claude Code needs the user's choice in
+# updatedInput (https://code.claude.com/docs/en/hooks#allow-with-updatedinput).
+# The board shows them, but the answer is given in the app.
+ANSWER_IN_APP = {"AskUserQuestion"}
+
 
 def describe_tool(tool: str, tool_input: dict) -> str:
     """One line for the screen: what the agent wants to do."""
@@ -25,6 +30,11 @@ def describe_tool(tool: str, tool_input: dict) -> str:
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         verb = "Write" if tool == "Write" else "Edit"
         return f"{verb}: {os.path.basename(str(path)) or path}"
+    if tool == "AskUserQuestion":
+        questions = tool_input.get("questions") or [{}]
+        return "Question: " + str(questions[0].get("question", ""))
+    if tool == "ExitPlanMode":
+        return "Plan ready: approve to start"
     if tool == "WebFetch":
         return "Fetch: " + str(tool_input.get("url", ""))
     if tool == "WebSearch":

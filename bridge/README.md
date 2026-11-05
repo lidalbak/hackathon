@@ -30,6 +30,8 @@ What the hooks do:
 
 With several sessions, **turn the knob** to move through them (the screen shows `2/3`, the ring shows where you are). The buttons answer the one on screen. **Push the knob** to jump back to what needs you most. A new request jumps to the top unless you are already looking at one that waits.
 
+**Questions with options** (`AskUserQuestion`) show on the screen as "In the app: Question: …", but the buttons do not answer them: Claude Code needs the chosen option, not just "allow", so you pick it in the app. Plan approval (`ExitPlanMode`) is a normal request: left starts the plan, right keeps planning. A question Claude asks in plain text ends its turn and shows as done.
+
 The hook never breaks Claude Code: if the bridge is not running it exits at once with no output.
 
 ## Files
