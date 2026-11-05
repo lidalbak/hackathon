@@ -12,7 +12,7 @@ Defined in [`firmware/controller/project.yaml`](../firmware/controller/project.y
 
 | Port | Module | Instance | Source | Job in the controller |
 | --- | --- | --- | --- | --- |
-| 1–2 | Screen, 160×80 colour (`st7735_tft`) | `screen` | Small Kit | Show the selected request and its risk |
+| 1–2 | Screen, 160×80 colour (`st7735_tft`) | `screen` | Small Kit | Which agent, which project, its state and what it wants |
 | 3–4 | Speaker (`speaker`) | `speaker` | Add-on | Chirp when an agent needs you |
 | 5–6 | Microphone (`microphone`) | `mic` | Add-on | Push-to-talk answers, later |
 | 7 | Button (`button`) | `approve` | Small Kit | Approve the selected request |

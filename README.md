@@ -61,14 +61,16 @@ atech check                            # which modules answered
 atech monitor                          # press approve/deny, watch the events
 atech send status_pixel '{"index": 0, "r": 255, "g": 0, "b": 0}'
 atech send speaker_play_rtttl "chirp:d=16,o=6,b=180:c,e,g"
+atech send show_session '{"agent": "Codex", "project": "demo", "state": "needs_input", "summary": "Run: npm test", "pos": 1, "total": 2}'
 ```
 
 ## Status
 
 | Part | State |
 | --- | --- |
-| Firmware module layout | Validated with `atech validate`, not yet flashed |
-| Bridge | Session model only. Hook listener and board driver not written |
+| Firmware | Compiles. Screen shows agent, project, state and request. Not yet flashed or tested on the board |
+| Bridge | Session model, queue ranking and screen payload, tested. Hook listener and board driver not written |
+| Approving from the device | Researched: both agents have a `PermissionRequest` hook that waits for an answer. Not built |
 | Claude Code integration | Not started |
 | Codex integration | Not started |
 

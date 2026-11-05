@@ -1,11 +1,16 @@
 # Agent Controller, v0 firmware.
 #
-# v0 has no custom code on purpose: the PC bridge drives everything through the
-# actions the generated firmware already accepts (see docs/architecture.md):
+# The PC bridge drives the board through actions and listens to its events.
+# Built in (generated from the modules below):
 #   status_pixel / status_fill / status_clear     -> session lights on the 3x3 grid
 #   speaker_play_rtttl                            -> chirp when an agent needs you
-# and listens to the events it already sends:
-#   approve / deny (1 = press, 0 = release)       -> answer the selected request
+#   approve / deny events (1 = press, 0 = release) -> answer the selected request
+# Our own, in code: below:
+#   show_session  {"agent","project","state","summary","pos","total"}
+#                 -> screen shows which agent, which project, its state and what it wants
+#   clear_session -> idle screen
+#
+# Text must be ASCII: the screen font has no æøå, and the bridge folds it.
 #
 # Board: 14-port (confirmed). Run `atech view firmware/controller` and check every
 # module is in the port shown before flashing.
@@ -21,3 +26,99 @@ modules:
   - {id: neopixel,        instance: status,   port: 9}         # Small Kit, one LED per session
   - {id: button,          instance: deny,     port: 10}        # Small Kit
   # Port 11 is free. Ports 13-14 are kept free for a rotary_encoder (scroll the request queue).
+
+code:
+  globals: |
+    // What the screen shows. Set by the show_session action from the bridge.
+    struct ScreenSession {
+      String agent;    // "Claude Code", "Codex"
+      String project;  // repo or folder name
+      String state;    // needs_input | error | done | working | idle
+      String summary;  // what the agent wants, one line, e.g. "Run: npm test"
+      long pos = 0;    // place in the queue, 1-based (0 = hide)
+      long total = 0;  // sessions in the queue
+    };
+    static ScreenSession g_session;
+    static bool g_hasSession = false;
+    static bool g_redraw = true;
+
+    // Colours match the light grid and the bridge's STATE_COLORS.
+    static uint16_t stateColor(const String& s) {
+      if (s == "needs_input") return ATECH_WARN;   // amber
+      if (s == "error")       return ATECH_ALERT;  // red
+      if (s == "done")        return ATECH_OK;     // green
+      if (s == "working")     return ATECH_ACCENT; // blue
+      return ATECH_MUTED;                          // idle
+    }
+
+    static const char* stateLabel(const String& s) {
+      if (s == "needs_input") return "NEEDS YOU";
+      if (s == "error")       return "ERROR";
+      if (s == "done")        return "DONE";
+      if (s == "working")     return "WORKING";
+      return "IDLE";
+    }
+
+  loop: |
+    // ---- actions from the bridge ----
+    if (atech_action == "show_session") {
+      g_session.agent   = atechJsonString(atech_value, "agent");
+      g_session.project = atechJsonString(atech_value, "project");
+      g_session.state   = atechJsonString(atech_value, "state");
+      g_session.summary = atechJsonString(atech_value, "summary");
+      g_session.pos     = atechNum(atech_value, "pos", 0);
+      g_session.total   = atechNum(atech_value, "total", 0);
+      if (!g_session.agent.length() || !g_session.state.length()) {
+        atechFail("show_session needs agent and state");
+      } else {
+        g_hasSession = true;
+        g_redraw = true;
+      }
+      atechDone();
+    } else if (atech_action == "clear_session") {
+      g_hasSession = false;
+      g_redraw = true;
+      atechDone();
+    }
+
+    // ---- screen: redraw only when something changed ----
+    if (g_redraw) {
+      g_redraw = false;
+      screen.clear();
+      int16_t w = screen.width();
+
+      if (!g_hasSession) {
+        int16_t top = atech::drawTitleBar(screen, "Agent Controller", nullptr, ATECH_PANEL, ATECH_FG);
+        atech::drawCenteredText(screen, top + 22, "No agent needs you", ATECH_MUTED);
+      } else {
+        uint16_t color = stateColor(g_session.state);
+
+        // Top bar: which agent, in the state's colour.
+        String title = g_session.agent;
+        if (g_session.total > 1) title += "  " + String(g_session.pos) + "/" + String(g_session.total);
+        int16_t top = atech::drawTitleBar(screen, title.c_str(), nullptr, color, ATECH_BG);
+
+        // State in large text, project to the right of it.
+        screen.setTextSize(2);
+        screen.setTextColor(color);
+        screen.setCursor(4, top + 4);
+        screen.print(stateLabel(g_session.state));
+        int16_t y = top + 4 + screen.lineHeight() + 2;   // below the large text
+        screen.setTextSize(1);
+
+        // Project and what the agent wants.
+        screen.setTextColor(ATECH_MUTED);
+        screen.setCursor(4, y);
+        screen.print(atech::fitText(screen, g_session.project, w - 8));
+        y += screen.lineHeight() + 1;
+
+        if (g_session.state == "needs_input") {
+          int16_t bar = screen.lineHeight() + 6;
+          atech::drawWrappedText(screen, g_session.summary, 0, 4, y, w - 8, screen.height() - bar - y);
+          atech::drawStatusBar(screen, "Left: approve   Right: deny");
+        } else {
+          atech::drawWrappedText(screen, g_session.summary, 0, 4, y, w - 8, screen.height() - y);
+        }
+      }
+      screen.display();
+    }

@@ -7,6 +7,7 @@ agent never touches the rest of the bridge.
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from time import time
@@ -72,3 +73,31 @@ class Session:
 def rank_queue(sessions: list[Session]) -> list[Session]:
     """What needs the human first; within a state, whoever has waited longest."""
     return sorted(sessions, key=lambda s: (_PRIORITY[s.state], s.since))
+
+
+AGENT_NAMES = {Agent.CLAUDE_CODE: "Claude Code", Agent.CODEX: "Codex"}
+
+# The screen font is plain ASCII, and the board's JSON reader does not decode
+# \u escapes, so every string sent to the screen is folded to ASCII first.
+_FOLD = str.maketrans({"æ": "ae", "Æ": "Ae", "ø": "o", "Ø": "O", "å": "a", "Å": "A"})
+SUMMARY_MAX = 160  # about four lines on the 160x80 screen
+
+
+def to_ascii(text: str) -> str:
+    folded = unicodedata.normalize("NFKD", text.translate(_FOLD))
+    return folded.encode("ascii", "ignore").decode("ascii")
+
+
+def screen_payload(session: Session, pos: int = 0, total: int = 0) -> dict[str, object]:
+    """Value for the board's show_session action: which agent, where, and its state."""
+    summary = to_ascii(" ".join(session.summary.split()))
+    if len(summary) > SUMMARY_MAX:
+        summary = summary[: SUMMARY_MAX - 2] + ".."
+    return {
+        "agent": AGENT_NAMES[session.agent],
+        "project": to_ascii(session.project),
+        "state": session.state.value,
+        "summary": summary,
+        "pos": pos,
+        "total": total,
+    }

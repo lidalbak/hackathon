@@ -1,4 +1,11 @@
-from agent_controller import Agent, AgentEvent, Session, SessionState, rank_queue
+from agent_controller import (
+    Agent,
+    AgentEvent,
+    Session,
+    SessionState,
+    rank_queue,
+    screen_payload,
+)
 
 
 def make(session_id: str, state: SessionState, since: float) -> Session:
@@ -36,3 +43,27 @@ def test_apply_resets_wait_time_only_on_state_change():
         9,
         "Run npm test?",
     )
+
+
+def test_screen_payload_names_agent_and_state_in_ascii():
+    session = Session(
+        Agent.CODEX,
+        "s1",
+        state=SessionState.NEEDS_INPUT,
+        summary="Run:   rm -rf  node_modules\n(rydde før bygg)",
+        project="kjøreplan",
+    )
+    assert screen_payload(session, pos=1, total=3) == {
+        "agent": "Codex",
+        "project": "kjoreplan",
+        "state": "needs_input",
+        "summary": "Run: rm -rf node_modules (rydde for bygg)",
+        "pos": 1,
+        "total": 3,
+    }
+
+
+def test_screen_payload_shortens_long_summaries():
+    session = Session(Agent.CLAUDE_CODE, "s1", summary="x" * 500)
+    summary = screen_payload(session)["summary"]
+    assert len(summary) == 160 and summary.endswith("..")
