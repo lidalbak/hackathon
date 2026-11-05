@@ -4,7 +4,7 @@ The prototype runs on the [Atech](https://atech.dev) kit: an ESP32-S3 motherboar
 
 ## What we have
 
-The Small Kit (10 modules), plus access to add-on modules such as a speaker, a microphone and sensors.
+The Small Kit (10 modules) with the 14-port board, plus access to add-on modules such as a speaker, a microphone and sensors.
 
 ## Planned layout
 
@@ -38,7 +38,7 @@ That leaves port 11 and the double port 13–14 free.
 
 ## Open questions
 
-- [ ] **Which board is in the Small Kit: 10-port or 14-port?** The layout assumes 14-port. Run `atech view firmware/controller` and compare with the board in your hand.
+- [x] **Which board is in the Small Kit?** 14-port, as the layout assumes.
 - [ ] **What exactly is in our Small Kit and in the add-on pile?** Confirm we have two buttons, the screen and the light grid, plus the speaker and microphone.
 - [ ] **Can we get a Big Screen and a knob?** Both make the demo much stronger.
 - [ ] **How do the modules get mounted?** Clawd uses a printed shell and ribbon cables. Do we have access to a 3D printer?

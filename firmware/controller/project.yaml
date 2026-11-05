@@ -7,8 +7,8 @@
 # and listens to the events it already sends:
 #   approve / deny (1 = press, 0 = release)       -> answer the selected request
 #
-# ASSUMPTION: 14-port board. Run `atech view firmware/controller` and check every
-# module against the board in your hand before flashing.
+# Board: 14-port (confirmed). Run `atech view firmware/controller` and check every
+# module is in the port shown before flashing.
 name: controller
 board: 14port
 feedback: false   # the bridge owns every output; no built-in demo behaviour
