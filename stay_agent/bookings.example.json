@@ -1,0 +1,6 @@
+[
+  {"id": "HM-1001", "guest_name": "Anna", "guests": 2, "language": "en",
+   "check_in": "2026-11-05T15:00", "check_out": "2026-11-06T11:00"},
+  {"id": "HM-1002", "guest_name": "Lars", "guests": 4, "language": "no",
+   "check_in": "2026-11-06T15:00", "check_out": "2026-11-08T11:00"}
+]

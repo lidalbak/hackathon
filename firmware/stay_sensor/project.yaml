@@ -1,0 +1,400 @@
+name: stay_sensor
+board: 14port
+libraries: [bblanchon/ArduinoJson@^7]
+modules:
+  - {id: aht20,      instance: th,     port: 1}
+  - {id: neopixel,   instance: light,  port: 2}
+  - {id: microphone, instance: mic,    ports: [3, 4]}
+  - {id: icm40608,   instance: imu,    port: 5}
+  - {id: st7735_tft, instance: screen, ports: [13, 14]}
+code:
+  globals: |
+    #include <ArduinoJson.h>
+    #include <HTTPClient.h>
+    #include <Preferences.h>
+    #include <WiFi.h>
+    #include <WiFiClientSecure.h>
+
+    // The device measures and shows; the agent decides. Every 5 s it POSTs its
+    // readings to the agent over Wi-Fi and shows what the agent answers. The
+    // agent runs on a laptop for the demo and in the cloud in production: only
+    // the server URL changes. USB is for power (and one-time setup) only.
+    //
+    // Privacy: the microphone is only ever read as a sound LEVEL. No audio
+    // samples leave this file (Airbnb allows decibel monitors, not recorders).
+
+    // ---- Noise in dB ---------------------------------------------------------
+    // ICS-43434: -26 dBFS at 94 dB SPL, so dB SPL ~ dBFS + 120. Approximate;
+    // correct it with `noise_cal` against a phone dB meter.
+    float dbOffset = 120.0f;
+
+    float rmsToDb(float rms) {
+      if (rms < 1.0f) rms = 1.0f;
+      return 20.0f * log10f(rms / 32767.0f) + dbOffset;
+    }
+
+    // ---- Tamper: picked up, moved, or turned away from where the host put it --
+    // The gravity direction a few seconds after boot (or at `tamper_arm`) is the
+    // baseline; turning more than 20 degrees from it for 2 s counts as moved.
+    float baseX = 0, baseY = 0, baseZ = 1;
+    float gravX = 0, gravY = 0, gravZ = 1;  // low-passed accelerometer
+    bool armed = false, tilted = false, moving = false;
+    float tiltFromBase = 0;
+
+    float angleFromBase() {
+      float n = sqrtf(gravX * gravX + gravY * gravY + gravZ * gravZ) *
+                sqrtf(baseX * baseX + baseY * baseY + baseZ * baseZ);
+      if (n < 0.01f) return 0;
+      float c = (gravX * baseX + gravY * baseY + gravZ * baseZ) / n;
+      return degrees(acosf(constrain(c, -1.0f, 1.0f)));
+    }
+
+    void armTamper() {
+      baseX = gravX; baseY = gravY; baseZ = gravZ;
+      armed = true;
+      tilted = false;
+    }
+
+    // ---- What the agent tells us -------------------------------------------
+    enum Level { LV_OK, LV_WATCH, LV_ALERT };
+    Level level = LV_OK;
+    String statusText = "Waiting for the agent...";
+    String guestName = "";
+    int bookedGuests = 0;
+
+    Level parseLevel(const String& s) {
+      if (s == "watch") return LV_WATCH;
+      if (s == "alert") return LV_ALERT;
+      return LV_OK;
+    }
+
+    // Applies {"level","text","guest","guests"}; any field may be missing.
+    bool applyAgentJson(const String& json) {
+      JsonDocument doc;
+      if (deserializeJson(doc, json)) return false;
+      if (doc["level"].is<const char*>()) level = parseLevel(doc["level"].as<const char*>());
+      if (doc["text"].is<const char*>())  statusText = doc["text"].as<const char*>();
+      if (doc["guest"].is<const char*>()) guestName = doc["guest"].as<const char*>();
+      if (doc["guests"].is<int>())        bookedGuests = doc["guests"].as<int>();
+      return true;
+    }
+
+    // ---- Network (runs in its own task so a slow server never stalls loop) ---
+    // Settings live in flash, written once over USB with `net_set`.
+    String wifiSsid, wifiPass, serverUrl, deviceToken, deviceId;
+    enum NetState { NET_UNSET, NET_JOINING, NET_OK, NET_FAIL };
+    volatile NetState netState = NET_UNSET;
+    volatile int lastHttpCode = 0;
+
+    struct Snapshot {
+      float temp = -99, hum = -1, db = 0, dbMax = 0, angle = 0;
+      bool moving = false, tampered = false;
+    };
+    SemaphoreHandle_t netLock;
+    Snapshot snap;              // written by loop, read by the net task
+    volatile bool snapFresh = false, postNow = false;
+    String agentReply;          // written by the net task, read by loop
+    volatile bool replyPending = false;
+
+    void loadNetSettings() {
+      Preferences p;
+      p.begin("stay", true);
+      wifiSsid = p.getString("ssid", "");
+      wifiPass = p.getString("pass", "");
+      serverUrl = p.getString("server", "");
+      deviceToken = p.getString("token", "");
+      deviceId = p.getString("id", "stay-sensor-1");
+      p.end();
+    }
+
+    String snapshotJson() {
+      xSemaphoreTake(netLock, portMAX_DELAY);
+      Snapshot s = snap;
+      snapFresh = false;
+      xSemaphoreGive(netLock);
+      char buf[256];
+      snprintf(buf, sizeof(buf),
+               "{\"device_id\":\"%s\",\"temp\":%.2f,\"hum\":%.1f,\"db\":%.1f,\"db_max\":%.1f,"
+               "\"moving\":%d,\"tampered\":%d,\"angle\":%.0f,\"uptime_s\":%lu}",
+               deviceId.c_str(), s.temp, s.hum, s.db, s.dbMax, s.moving ? 1 : 0,
+               s.tampered ? 1 : 0, s.angle, (unsigned long)(millis() / 1000));
+      return String(buf);
+    }
+
+    void netTask(void*) {
+      uint32_t lastPost = 0;
+      for (;;) {
+        if (!wifiSsid.length() || !serverUrl.length()) {
+          netState = NET_UNSET;
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          continue;
+        }
+        if (WiFi.status() != WL_CONNECTED) {
+          netState = NET_JOINING;
+          WiFi.mode(WIFI_STA);
+          WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+          for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) vTaskDelay(pdMS_TO_TICKS(250));
+          if (WiFi.status() != WL_CONNECTED) { netState = NET_FAIL; vTaskDelay(pdMS_TO_TICKS(5000)); }
+          continue;
+        }
+        bool due = postNow || (snapFresh && millis() - lastPost >= 4500);
+        if (!due) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
+        postNow = false;
+        lastPost = millis();
+
+        String body = snapshotJson();
+        String url = serverUrl + "/api/readings";
+        HTTPClient http;
+        WiFiClientSecure tls;
+        WiFiClient plain;
+        if (url.startsWith("https")) {
+          tls.setInsecure();  // hackathon: no CA pinning yet
+          http.begin(tls, url);
+        } else {
+          http.begin(plain, url);
+        }
+        http.setTimeout(4000);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-Device-Token", deviceToken);
+        int code = http.POST(body);
+        lastHttpCode = code;
+        if (code == 200) {
+          String reply = http.getString();
+          xSemaphoreTake(netLock, portMAX_DELAY);
+          agentReply = reply;
+          replyPending = true;
+          xSemaphoreGive(netLock);
+          netState = NET_OK;
+        } else {
+          netState = NET_FAIL;
+        }
+        http.end();
+      }
+    }
+
+    void emitNet() {
+      Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"state\",\"key\":\"net\",\"value\":"
+                    "{\"state\":%d,\"ssid\":\"%s\",\"ip\":\"%s\",\"server\":\"%s\",\"http\":%d,\"id\":\"%s\"}}}\n",
+                    (int)netState, wifiSsid.c_str(), WiFi.localIP().toString().c_str(),
+                    serverUrl.c_str(), lastHttpCode, deviceId.c_str());
+    }
+
+    // ---- Screen (160x80, built-in font: 6x8 px per char at size 1) -----------
+    uint16_t levelColor(Level l) {
+      return l == LV_OK ? ATECH_OK : l == LV_WATCH ? ATECH_WARN : ATECH_ALERT;
+    }
+
+    const char* levelLabel(Level l) {
+      return l == LV_OK ? "ALL GOOD" : l == LV_WATCH ? "WATCHING" : "ATTENTION";
+    }
+
+    void drawCell(int x, int y, const char* label, const char* value, const char* unit) {
+      screen.setTextSize(1);
+      screen.setTextColor(ATECH_MUTED);
+      screen.setCursor(x + 2, y);
+      screen.print(label);
+      screen.setTextSize(2);
+      screen.setTextColor(ATECH_FG);
+      screen.setCursor(x + 2, y + 9);
+      screen.print(value);
+      int vw = screen.textWidth(value);
+      screen.setTextSize(1);
+      screen.setTextColor(ATECH_MUTED);
+      screen.setCursor(x + 4 + vw, y + 17);
+      screen.print(unit);
+    }
+
+    // What the bottom line says when the agent can't be reached
+    String netProblem() {
+      switch (netState) {
+        case NET_UNSET:   return "Not set up: send net_set over USB";
+        case NET_JOINING: return "Joining Wi-Fi " + wifiSsid + "...";
+        case NET_FAIL:
+          if (WiFi.status() != WL_CONNECTED) return "Wi-Fi " + wifiSsid + " not reachable";
+          return "Agent not reachable (HTTP " + String(lastHttpCode) + ")";
+        default:          return "";
+      }
+    }
+
+    void drawScreen(float db, float peakDb) {
+      const int W = screen.width();
+      char buf[32];
+      screen.clear();
+      screen.setFont(nullptr);
+      screen.setTextSize(1);
+
+      // Header: status from the agent (or MOVED, straight away), guest on the right
+      screen.fillRect(0, 0, W, 13, tilted ? ATECH_ALERT : levelColor(level));
+      screen.setTextColor(ATECH_BG);
+      screen.setCursor(3, 3);
+      screen.print(tilted ? "MOVED" : levelLabel(level));
+      if (guestName.length()) {
+        snprintf(buf, sizeof(buf), "%s(%d)", guestName.c_str(), bookedGuests);
+        String g = fitText(screen, String(buf), 96);
+        screen.setCursor(W - 3 - screen.textWidth(g), 3);
+        screen.print(g.c_str());
+      }
+
+      // 2x2 readings
+      snprintf(buf, sizeof(buf), "%.0f", db);
+      drawCell(0, 16, "Noise", buf, "dB");
+      snprintf(buf, sizeof(buf), "%.0f", peakDb);
+      drawCell(80, 16, "Peak", buf, "dB");
+      bool thOk = th.isConnected();
+      if (thOk) snprintf(buf, sizeof(buf), "%.1f", th.readTemperature()); else strcpy(buf, "--");
+      drawCell(0, 41, "Temp", buf, "C");
+      if (thOk) snprintf(buf, sizeof(buf), "%.0f", th.readHumidity()); else strcpy(buf, "--");
+      drawCell(80, 41, "Humidity", buf, "%");
+
+      // Bottom line: the agent's last action, or why it can't be reached.
+      // Scrolls when too long.
+      String text = netState == NET_OK ? statusText : netProblem();
+      const int cols = W / 6 - 1;
+      String line = text;
+      if ((int)line.length() > cols) {
+        String twice = text + "     " + text;
+        int start = (millis() / 250) % (text.length() + 5);
+        line = twice.substring(start, start + cols);
+      }
+      screen.drawLine(0, 66, W, 66, ATECH_PANEL);
+      screen.setTextSize(1);
+      screen.setTextColor(netState == NET_OK ? ATECH_FG : ATECH_WARN);
+      screen.setCursor(3, 70);
+      screen.print(line.c_str());
+
+      screen.display();
+    }
+  setup: |
+    screen.setRotation(3);
+    light.setBrightness(40);
+    imu.calibrateGyro();
+    netLock = xSemaphoreCreateMutex();
+    loadNetSettings();
+    xTaskCreatePinnedToCore(netTask, "net", 16384, nullptr, 1, nullptr, 0);
+  loop: |
+    static EveryTimer sampleTimer, envTimer, ledTimer, drawTimer, imuTimer;
+    static uint32_t lastMotion = 0, tiltSince = 0, restartAt = 0;
+    // Noise: energy-average the mic level over 5 s
+    static double e5 = 0;
+    static int n5 = 0;
+    static float max5 = 0, lastDb = 0, lastPeak = 0;
+
+    // ---- Actions over USB (setup and debugging) ----
+    if (atech_action == "net_set") {
+      // {"ssid":"...","pass":"...","server":"http://192.168.1.20:8080","token":"...","id":"oslo-1"}
+      JsonDocument doc;
+      if (deserializeJson(doc, atech_value)) {
+        atechFail("value must be a JSON object");
+      } else {
+        Preferences p;
+        p.begin("stay", false);
+        for (const char* k : {"ssid", "pass", "server", "token", "id"}) {
+          if (doc[k].is<const char*>()) p.putString(k, doc[k].as<const char*>());
+        }
+        p.end();
+        restartAt = millis() + 500;  // reboot to join with the new settings
+      }
+      atechDone();
+    }
+    if (atech_action == "net_status") {
+      emitNet();
+      atechDone();
+    }
+    if (atech_action == "status_set" || atech_action == "stay_set") {
+      // Same JSON the agent answers with; lets you drive the screen by hand
+      if (!applyAgentJson(atech_value)) atechFail("value must be a JSON object");
+      atechDone();
+    }
+    if (atech_action == "tamper_arm") {
+      armTamper();
+      postNow = true;
+      atechDone();
+    }
+    if (atech_action == "noise_cal") {
+      float v = atech_value.toFloat();
+      if (v < 60 || v > 180) atechFail("offset must be 60-180");
+      else dbOffset = v;
+      atechDone();
+    }
+    if (restartAt && millis() > restartAt) ESP.restart();
+
+    // ---- The agent's latest answer ----
+    if (replyPending) {
+      xSemaphoreTake(netLock, portMAX_DELAY);
+      String reply = agentReply;
+      replyPending = false;
+      xSemaphoreGive(netLock);
+      applyAgentJson(reply);
+    }
+
+    // ---- Noise ----
+    if (sampleTimer.ready(50)) {
+      float r = mic.getSoundLevel();
+      e5 += (double)r * r; n5++;
+      max5 = max(max5, rmsToDb(r));
+    }
+    if (envTimer.ready(5000) && n5) {
+      lastDb = rmsToDb(sqrt(e5 / n5));
+      lastPeak = max5;
+      e5 = 0; n5 = 0; max5 = 0;
+      bool thOk = th.isConnected();
+      xSemaphoreTake(netLock, portMAX_DELAY);
+      snap.temp = thOk ? th.readTemperature() : -99.0f;
+      snap.hum = thOk ? th.readHumidity() : -1.0f;
+      snap.db = lastDb;
+      snap.dbMax = lastPeak;
+      snap.moving = moving;
+      snap.tampered = tilted;
+      snap.angle = tiltFromBase;
+      snapFresh = true;
+      xSemaphoreGive(netLock);
+      // Same reading over USB, for `atech monitor` while debugging
+      Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"sensor\",\"key\":\"env\",\"value\":"
+                    "{\"temp\":%.2f,\"hum\":%.1f,\"db\":%.1f,\"db_max\":%.1f,\"moving\":%d,\"tampered\":%d,\"angle\":%.0f}}}\n",
+                    snap.temp, snap.hum, lastDb, lastPeak, moving ? 1 : 0, tilted ? 1 : 0, tiltFromBase);
+    }
+
+    // ---- Tamper ----
+    if (imuTimer.ready(20)) {
+      float ax = imu.readAccelX(), ay = imu.readAccelY(), az = imu.readAccelZ();
+      gravX += 0.1f * (ax - gravX);
+      gravY += 0.1f * (ay - gravY);
+      gravZ += 0.1f * (az - gravZ);
+      float accDev = fabsf(sqrtf(ax * ax + ay * ay + az * az) - 1.0f);
+      float gx = imu.readGyroX(), gy = imu.readGyroY(), gz = imu.readGyroZ();
+      float spin = sqrtf(gx * gx + gy * gy + gz * gz);
+
+      // Motion: starts on a jolt or rotation, ends after 3 s still
+      if (accDev > 0.12f || spin > 25.0f) {
+        lastMotion = millis();
+        moving = true;
+      } else if (moving && millis() - lastMotion > 3000) {
+        moving = false;
+      }
+
+      // Baseline: wherever it rests a few seconds after power-on
+      if (!armed && millis() > 8000 && !moving) armTamper();
+
+      if (armed) {
+        tiltFromBase = angleFromBase();
+        if (!tilted && tiltFromBase > 20.0f) {
+          if (!tiltSince) tiltSince = millis();
+          if (millis() - tiltSince > 2000) { tilted = true; snap.tampered = true; postNow = true; }
+        } else if (tiltFromBase <= 20.0f) {
+          tiltSince = 0;
+        }
+        if (tilted && tiltFromBase < 10.0f && !moving) { tilted = false; snap.tampered = false; postNow = true; }
+      }
+    }
+
+    // ---- Light: the agent's status, alert breathes; MOVED overrides ----
+    if (ledTimer.ready(30)) {
+      float k = (level == LV_ALERT || tilted) ? 0.35f + 0.65f * (0.5f + 0.5f * sinf(millis() / 220.0f)) : 1.0f;
+      if (tilted)                 light.setAll(255 * k, 0, 0);
+      else if (level == LV_OK)    light.setAll(0, 255 * k, 40 * k);
+      else if (level == LV_WATCH) light.setAll(255 * k, 120 * k, 0);
+      else                        light.setAll(255 * k, 0, 0);
+      light.show();
+    }
+
+    if (drawTimer.ready(250)) drawScreen(lastDb, lastPeak);

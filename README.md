@@ -43,6 +43,8 @@ Two paths into the same device. The **Claude desktop app** talks to the board di
 | [`docs/architecture.md`](docs/architecture.md) | Data flow, session states, board protocol |
 | [`airbnb_chat/`](airbnb_chat) | Separate demo: Airbnb-style chat with a read/write API. Docs in [`docs/airbnb-chat.md`](docs/airbnb-chat.md) |
 | [`room/`](room) | Separate prototype: Room, answers questions from a meeting while it runs (Norwegian). See [`room/README.md`](room/README.md) |
+| [`firmware/stay_sensor/`](firmware/stay_sensor) | Airbnb stay sensor: noise, temperature, humidity and tamper over Wi-Fi ([protocol](firmware/stay_sensor/PROTOCOL.md)) |
+| [`stay_agent/`](stay_agent) | Agent for the stay sensor: rules, guest and owner messages, reports, written by Claude through Pydantic AI |
 
 ## Getting started
 

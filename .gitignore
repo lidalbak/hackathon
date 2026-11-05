@@ -18,3 +18,6 @@ dist/
 
 # Local secrets
 .env
+
+# stay-agent output (stay reports with guest names)
+reports/
