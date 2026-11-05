@@ -38,12 +38,10 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(c.get('/hosting/messages').status_code, 200)
         convos = c.get('/api/conversations').json()['conversations']
         self.assertEqual(len(convos), 6)
-        self.assertEqual({x['guest']['name'] for x in convos}, {'Emma'})
-        hosted = c.get('/api/conversations?role=host').json()['conversations']  # stay_agent's demo stay
-        self.assertEqual([(x['id'], x['listing']['title'], x['reservation']['check_in']) for x in hosted],
-                         [(1, 'Cozy loft near Bryggen', str(date.today()))])
-        self.assertFalse(any(x['unread_by']['guest'] or x['unread_by']['host'] for x in convos))
-        self.assertEqual(c.get('/', follow_redirects=False).headers['location'], '/guest/messages')
+        self.assertEqual({x['my_role'] for x in convos}, {'host'})
+        self.assertEqual(c.get('/api/conversations?role=guest').json()['conversations'], [])
+        self.assertTrue(all(x['last_message']['sender'] == 'host' and not x['unread'] for x in convos))
+        self.assertEqual(c.get('/', follow_redirects=False).headers['location'], '/hosting/messages')
 
     def test_write_and_read_messages(self):
         c = self.client
@@ -55,7 +53,6 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual([m['text'] for m in msgs], ['Earlier', 'Later'])
         self.assertEqual(c.get('/api/conversations').json()['conversations'][0]['id'], cid)
         self.assertEqual(created.json()['unread'], 2)
-        self.assertEqual(created.json()['unread_by'], {'guest': 0, 'host': 2})
 
         reply = c.post(f'/api/conversations/{cid}/messages', json={'sender': 'host', 'text': ' Hi Noah! '})
         self.assertEqual(reply.status_code, 201)
@@ -64,7 +61,6 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual([m['id'] for m in after], [reply.json()['id']])
         convo = c.get(f'/api/conversations/{cid}').json()
         self.assertEqual(convo['unread'], 0)  # replying marks the thread read
-        self.assertEqual(convo['unread_by']['guest'], 1)  # each side has its own count
         self.assertEqual(len(convo['messages']), 3)
 
         read = c.post(f'/api/conversations/{cid}/read', json={'by': 'guest'}).json()

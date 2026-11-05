@@ -18,14 +18,12 @@ python -m airbnb_chat                     # http://127.0.0.1:8766  (--host, --po
 
 | Page | What it shows |
 | --- | --- |
-| `/guest/messages[/{id}]` | Traveler inbox (the default): every conversation as its guest sees it |
-| `/hosting/messages[/{id}]` | Host inbox: the same conversations as their host sees them, host top bar, Accept/Decline on booking requests |
+| `/guest/messages[/{id}]` | Traveler inbox |
+| `/hosting/messages[/{id}]` | Host inbox (the default): host top bar, Accept/Decline on booking requests |
 
-Each page shows every conversation from its own side, like the guest's and the host's own inboxes on Airbnb. "Switch
-to hosting" opens the same thread from the other side. The demo starts with six conversations from
-[`airbnb_chat/seed.json`](../airbnb_chat/seed.json). You are "Emma", the guest in all of them: you ask for the wifi
-password and parking, and hosts write to you about noise and checkout. Conversation 1 (Emma at "Cozy loft near
-Bryggen" from today) is the stay agent's demo stay, so it keeps `my_role: "host"`. `/` opens the traveler inbox. Seed dates are days from today, and message times are minutes ago. Data is stored in
+The demo starts with six conversations from [`airbnb_chat/seed.json`](../airbnb_chat/seed.json). You are "Alex", the
+host in all of them: guests asking for the wifi password and parking, and your follow-ups about noise and checkout.
+`/` opens the host inbox. Seed dates are days from today, and message times are minutes ago. Data is stored in
 `airbnb_chat/data/chat.db` (git-ignored). `POST /api/reset` reloads the seed.
 
 | Variable | Effect |
@@ -43,14 +41,13 @@ python -m airbnb_chat
 cloudflared tunnel --url http://127.0.0.1:8766        # prints https://<random>.trycloudflare.com
 ```
 
-Share `https://<random>.trycloudflare.com/guest/messages?token=$CHAT_API_TOKEN`. Always set a token first: without
+Share `https://<random>.trycloudflare.com/hosting/messages?token=$CHAT_API_TOKEN`. Always set a token first: without
 one, anyone with the URL can read and write. Quick tunnels hold back server-sent events, so the page falls back to
 polling every 2 s on its own. Bots should use `http://127.0.0.1:8766` on the same machine, the webhook, or polling.
 
 ## Data model
 
-`my_role` is the account owner's side in a conversation, `guest` or `host`; `?role=` filters on it. The pages don't
-use it: they pick the side from the URL. `unread` counts for `my_role`, `unread_by` for each side. A message's
+Every conversation belongs to the account owner. `my_role` is the owner's side in it, `guest` or `host`. A message's
 `sender` is `guest`, `host` or `system`. A system message shows as a centered event, such as "Reservation confirmed".
 
 ```json
@@ -64,7 +61,7 @@ use it: they pick the side from the URL. `unread` counts for `my_role`, `unread_
   "reservation": {"status": "confirmed", "check_in": "2026-11-05", "check_out": "2026-11-08",
                   "guests": 2, "code": "HM8VK2QX7D", "total": "kr 4,860"},
   "read": {"guest": 3, "host": 3},
-  "unread": 0, "unread_by": {"guest": 0, "host": 0},
+  "unread": 0,
   "typing": null,
   "last_message": {"id": 3, "conversation_id": 1, "sender": "host", "text": "Welcome, Emma! The network is …",
                    "created_at": "2026-11-05T17:49:57+00:00", "source": "seed"},
@@ -125,7 +122,7 @@ The webhook (`CHAT_WEBHOOK_URL`) receives the same `message.created` payload as 
 ```bash
 B=http://127.0.0.1:8766/api      # add -H "Authorization: Bearer $CHAT_API_TOKEN" if a token is set
 
-# A new guest writes in. It shows up live in /hosting/messages (and in /guest/messages from Noah's side).
+# A new guest writes in. It shows up live in /hosting/messages.
 curl -X POST $B/conversations -H 'Content-Type: application/json' -d '{
   "my_role": "host",
   "guest": {"name": "Noah"}, "host": {"name": "Alex"},

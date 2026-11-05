@@ -1,9 +1,7 @@
 """SQLite store for the Airbnb-style inbox.
 
-A conversation is between a guest and a host. `my_role` is the account owner's side in it
-(the one that ?role= filters by); the pages show every conversation from their own side,
-/guest/messages as the guest and /hosting/messages as the host. Messages are sent by
-'guest', 'host' or 'system'.
+A conversation belongs to the account owner ("you"), who is either the guest or the
+host in it (`my_role`). Messages are sent by 'guest', 'host' or 'system'.
 """
 import json
 import sqlite3
@@ -142,12 +140,11 @@ def _conversation(row):
     me = row['my_role']
     last = _conn.execute('SELECT * FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 1',
                          (row['id'],)).fetchone()
-    unread_by = {role: _conn.execute('SELECT count(*) FROM messages WHERE conversation_id=? AND sender=? AND id>?',
-                                     (row['id'], other(role), row[f'{role}_read_id'])).fetchone()[0]
-                 for role in ROLES}
+    unread = _conn.execute('SELECT count(*) FROM messages WHERE conversation_id=? AND sender=? AND id>?',
+                           (row['id'], other(me), row[f'{me}_read_id'])).fetchone()[0]
     return {'id': row['id'], 'my_role': me, **{k: data.get(k, {}) for k in SCHEMA},
             'read': {'guest': row['guest_read_id'], 'host': row['host_read_id']},
-            'unread': unread_by[me], 'unread_by': unread_by, 'last_message': _message(last) if last else None,
+            'unread': unread, 'last_message': _message(last) if last else None,
             'created_at': row['created_at'], 'updated_at': row['updated_at']}
 
 

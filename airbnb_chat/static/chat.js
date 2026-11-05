@@ -1,9 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const base = location.pathname.startsWith('/hosting') ? 'hosting' : 'guest';
-// Every conversation is shown from this page's side, like the two parties' own inboxes on Airbnb.
-const me = base === 'hosting' ? 'host' : 'guest';
-const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['support', 'Support']];
+const FILTERS = [['all', 'All'], ['host', 'Hosting'], ['guest', 'Traveling'], ['support', 'Support']];
 const LOCALE = 'en-US';
 const wide = () => matchMedia('(min-width: 1128px)').matches;
 const twoPane = () => matchMedia('(min-width: 744px)').matches;
@@ -27,8 +25,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const linkify = text => String(text).split(/(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)])/g)
   .map((part, i) => i % 2 ? `<a href="${esc(part)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>` : esc(part)).join('');
 const other = role => role === 'guest' ? 'host' : 'guest';
-const contact = c => c[other(me)] || {};
-const unread = c => c.unread_by?.[me] || 0;
+const contact = c => c[other(c.my_role)] || {};
 const url = id => `/${base}/messages${id ? '/' + id : ''}`;
 const idFromPath = () => Number(location.pathname.match(/\/messages\/(\d+)/)?.[1]) || null;
 const lastAt = c => c.last_message?.created_at || c.created_at;
@@ -72,7 +69,7 @@ function range(r = {}) {
 }
 
 function statusLabel(c) {
-  const r = c.reservation || {}, host = me === 'host', today = startOfDay(new Date());
+  const r = c.reservation || {}, host = c.my_role === 'host', today = startOfDay(new Date());
   switch (r.status) {
     case 'inquiry': return 'Inquiry';
     case 'pending': return host ? 'Request to book' : 'Request pending';
@@ -98,7 +95,8 @@ function visible() {
   const q = state.query.trim().toLowerCase();
   return state.conversations.filter(c => {
     if (state.filter === 'support') return false;
-    if (state.filter === 'unread' && !unread(c)) return false;
+    if (state.filter === 'unread' && !c.unread) return false;
+    if ((state.filter === 'host' || state.filter === 'guest') && c.my_role !== state.filter) return false;
     return !q || [contact(c).name, c.listing?.title, c.listing?.location, c.last_message?.text]
       .some(v => v && v.toLowerCase().includes(q));
   });
@@ -110,8 +108,8 @@ function renderChrome() {
   const sw = $('switch'), id = state.current?.id;
   sw.textContent = base === 'hosting' ? 'Switch to traveling' : 'Switch to hosting';
   sw.href = `/${base === 'hosting' ? 'guest' : 'hosting'}/messages${id ? '/' + id : ''}`;
-  const self = state.conversations[0]?.[me];
-  if (self) $('me-avatar').outerHTML = avatar(self, 32).replace('class="avatar', 'id="me-avatar" class="avatar');
+  const me = state.conversations[0]?.[state.conversations[0].my_role];
+  if (me) $('me-avatar').outerHTML = avatar(me, 32).replace('class="avatar', 'id="me-avatar" class="avatar');
 }
 
 function renderChips() {
@@ -123,7 +121,7 @@ function preview(c) {
   const m = c.last_message;
   if (!m) return 'No messages yet';
   const text = m.text.replace(/\s+/g, ' ');
-  return m.sender === me ? `You: ${text}` : text;
+  return m.sender === c.my_role ? `You: ${text}` : text;
 }
 
 function renderList() {
@@ -139,7 +137,7 @@ function renderList() {
   $('threads').innerHTML = rows.map(c => {
     const who = contact(c), when = c.last_message ? listDate(new Date(c.last_message.created_at)) : '';
     const sub = [statusLabel(c), range(c.reservation), c.listing?.location?.split(',')[0]].filter(Boolean).join(' · ');
-    const cls = `thread-row${c.id === state.current?.id ? ' active' : ''}${unread(c) ? ' unread' : ''}`;
+    const cls = `thread-row${c.id === state.current?.id ? ' active' : ''}${c.unread ? ' unread' : ''}`;
     return `<li><a class="${cls}" href="${url(c.id)}" data-id="${c.id}">${avatar(who, 48)}
       <span class="row-main">
         <span class="row-top"><span class="row-name">${esc(who.name)}</span><span class="row-date">${when}</span></span>
@@ -164,7 +162,7 @@ function renderThread() {
 }
 
 function renderMessages(forceScroll = false) {
-  const c = state.current, sc = $('scroller'), mine = me;
+  const c = state.current, sc = $('scroller'), mine = c.my_role;
   const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 160;
   const spoken = state.messages.filter(m => m.sender !== 'system');
   const receiptFor = spoken.length && spoken[spoken.length - 1].sender === mine ? spoken[spoken.length - 1] : null;
@@ -205,7 +203,7 @@ function renderMessages(forceScroll = false) {
 }
 
 function renderDetails() {
-  const c = state.current, r = c.reservation || {}, l = c.listing || {}, who = contact(c), host = me === 'host';
+  const c = state.current, r = c.reservation || {}, l = c.listing || {}, who = contact(c), host = c.my_role === 'host';
   const day = s => s ? fmt(parseDay(s), { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
   const guests = r.guests ? `${r.guests} guest${r.guests > 1 ? 's' : ''}` : '—';
   const row = (k, v) => `<div class="detail-row"><span>${k}</span><span>${esc(v)}</span></div>`;
@@ -272,9 +270,9 @@ function close(push = true) {
 
 async function markRead() {
   const c = state.current;
-  if (!c || !unread(c) || document.hidden) return;
+  if (!c || !c.unread || document.hidden) return;
   try {
-    upsert(await api(`/conversations/${c.id}/read`, { method: 'POST', body: { by: me } }));
+    upsert(await api(`/conversations/${c.id}/read`, { method: 'POST', body: { by: c.my_role } }));
     renderList();
   } catch { /* the next event or reload catches up */ }
 }
@@ -307,7 +305,7 @@ function notifyTyping(typing) {
   const c = state.current;
   if (!c || (typing && Date.now() - lastTypingSent < 3000) || (!typing && !lastTypingSent)) return;
   lastTypingSent = typing ? Date.now() : 0;
-  api(`/conversations/${c.id}/typing`, { method: 'POST', body: { sender: me, typing } }).catch(() => {});
+  api(`/conversations/${c.id}/typing`, { method: 'POST', body: { sender: c.my_role, typing } }).catch(() => {});
 }
 
 // ---- live updates -----------------------------------------------------------
@@ -328,12 +326,12 @@ async function poll() {
     if (c) {
       const last = state.messages[state.messages.length - 1]?.id || 0;
       const { messages } = await api(`/conversations/${c.id}/messages?after=${last}`);
-      const typing = c.typing && c.typing !== me ? c.typing : null;
+      const typing = c.typing && c.typing !== c.my_role ? c.typing : null;
       messages.forEach(m => { if (!state.messages.some(x => x.id === m.id)) state.messages.push(m); });
       if (messages.length || typing !== state.typing || changed) {
         state.typing = typing;
         renderThread();
-        if (messages.some(m => m.sender !== me)) markRead();
+        if (messages.some(m => m.sender !== c.my_role)) markRead();
       }
     }
     if (changed) renderList();
@@ -355,7 +353,7 @@ function connect() {
       if (!state.messages.some(m => m.id === ev.message.id)) state.messages.push(ev.message);
       if (state.typing === ev.message.sender) { clearTimeout(typingTimer); state.typing = null; }
       renderThread();
-      if (ev.message.sender !== me) markRead();
+      if (ev.message.sender !== state.current.my_role) markRead();
     }
     renderList();
   });
@@ -375,7 +373,7 @@ function connect() {
     resync();
   });
   on('typing', ev => {
-    if (state.current?.id === ev.conversation_id && ev.sender !== me) setTyping(ev.typing ? ev.sender : null);
+    if (state.current?.id === ev.conversation_id && ev.sender !== state.current.my_role) setTyping(ev.typing ? ev.sender : null);
   });
   on('reset', async () => {
     state.current = null;
@@ -406,7 +404,7 @@ $('composer').addEventListener('submit', async e => {
   sending = true; updateSend();
   $('compose-error').hidden = true;
   try {
-    const m = await api(`/conversations/${c.id}/messages`, { method: 'POST', body: { sender: me, text, source: 'ui' } });
+    const m = await api(`/conversations/${c.id}/messages`, { method: 'POST', body: { sender: c.my_role, text, source: 'ui' } });
     lastTypingSent = 0;
     input.value = ''; autosize();
     if (!state.messages.some(x => x.id === m.id)) state.messages.push(m);
