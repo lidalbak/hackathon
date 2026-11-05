@@ -42,6 +42,7 @@ Two paths into the same device. The **Claude desktop app** talks to the board di
 | [`docs/hardware.md`](docs/hardware.md) | Kit, modules, port layout, open questions |
 | [`docs/architecture.md`](docs/architecture.md) | Data flow, session states, board protocol |
 | [`airbnb_chat/`](airbnb_chat) | Separate demo: Airbnb-style chat with a read/write API. Docs in [`docs/airbnb-chat.md`](docs/airbnb-chat.md) |
+| [`room/`](room) | Separate prototype: Room, answers questions from a meeting while it runs (Norwegian). See [`room/README.md`](room/README.md) |
 
 ## Getting started
 

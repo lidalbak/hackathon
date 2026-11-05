@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="no"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Room · Møtets nysgjerrige medspiller</title><link rel="stylesheet" href="/static/style.css"></head>
+<body><header><a class="brand" href="/">room<span>●</span></a><div class="session">PRODUKTMØTE <span>/</span> Lokalt demorom</div><div class="header-pills"><span id="recPill" class="pill rec" hidden>● OPPTAK <b id="recTime">00:00</b></span><span id="mode" class="pill"></span></div></header>
+<main><section class="intro"><div><div class="eyebrow">FRA SAMTALE TIL INNSIKT</div><h1>La spørsmålet jobbe.<br>Fortsett samtalen.</h1><p>Room lytter etter produktspørsmål, undersøker dem i bakgrunnen<br>og lyser når svaret er klart. Dere velger når det får ordet.</p></div><div class="device"><div class="device-top"><span>ROOM / 01</span><span id="deviceState">STANDBY</span></div><div class="device-body"><div class="leds" id="leds"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lcd" id="lcd">Klar for neste spørsmål</div><button id="physical" class="hardware-button" title="Vis nyeste ferdige resultat" aria-label="Vis nyeste ferdige resultat">↗</button></div><div class="device-foot">SIMULERT ATECH · MIKROFON · LED 3x3 · SKJERM · KNAPP</div></div></section>
+<div class="notice">DEMODATA <span>180 syntetiske kunder · Produkter X, Y og Z · Ingen eksterne systemer tilkoblet</span></div>
+<section class="workspace"><div class="left">
+<div class="section-head"><h2>Samtalen</h2><span id="micState">MIKROFON AV</span></div>
+<div class="recorder" id="recorder">
+ <div class="rec-row"><button type="button" id="rec" class="rec-button">● Start opptak</button><div class="meter" aria-hidden="true"><span id="meterFill"></span></div><button type="button" id="demoMeeting" class="secondary">▶ Spill av demomøte</button></div>
+ <p class="rec-status" id="recStatus">Laster …</p>
+ <p class="privacy" id="privacy"></p>
+</div>
+<div id="transcript" class="transcript" aria-live="polite"><p class="empty">Start opptak, spill av demomøtet eller skriv et spørsmål.</p></div>
+<div id="live" class="live" hidden><span class="live-label">NÅ</span><span id="liveFinal"></span> <span id="livePartial" class="partial"></span></div>
+<form id="ask"><label for="question">Eller skriv et produktspørsmål</label><textarea id="question" placeholder="Hvor mange nye kunder bruker produkt X siste 30 dager?" required maxlength="4000"></textarea><div class="input-actions"><button class="sample" type="button" id="demo">Prøv et ferdig eksempel →</button><button class="primary" type="submit">Undersøk ↗</button></div></form>
+<button type="button" id="clearTranscript" class="link-button">Slett transkripsjonen</button>
+</div><div class="right"><div class="section-head"><h2>Arbeid i bakgrunnen</h2><span id="taskCount">0 OPPGAVER</span></div><div id="tasks"></div></div></section>
+<section id="results" class="results"><div class="section-head"><h2>På møteromsskjermen</h2><span>ÅPNES MED KNAPPEN PÅ BOKSEN</span></div><div id="dashboards"><div class="result-placeholder">Når et svar er klart, lyser boksen.<br><strong>Trykk for å gi innsikten plass.</strong></div></div></section><section id="draftSection" hidden><div class="section-head"><h2>GitHub-utkast</h2><span>INGENTING PUBLISERES AUTOMATISK</span></div><div id="drafts"></div></section><div id="error" role="alert"></div></main><footer>room / meeting intelligence <span>Lokalt prototype · Visbare kilder · Mennesket bestemmer</span></footer><script src="/static/mic.js"></script><script src="/static/app.js"></script></body></html>
