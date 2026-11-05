@@ -58,10 +58,56 @@ code:
       tilted = false;
     }
 
-    // ---- Hands off: the distance sensor sees something within 10 cm -----------
-    const int NEAR_MM = 100;   // closer than this shows DO NOT TOUCH
-    const int CLEAR_MM = 150;  // and it goes away beyond this (no flicker at the edge)
-    bool handNear = false;
+    // ---- Hands off: something new within 10 cm of the distance sensor ---------
+    // Each of the 64 zones has a background: what it saw when the device was
+    // placed (with the tamper baseline). A zone counts as near when it is closer
+    // than NEAR_MM AND clearly closer than its background, so a cable or the shelf
+    // edge in view never triggers. The driver passes on zones without a valid
+    // target as random small values (a couple of zones read ~90 mm in an empty
+    // room), so it takes NEAR_ZONES of them: a hand within 10 cm covers far more.
+    // The warning goes away after CLEAR_HOLD_MS with nothing near.
+    const int NEAR_MM = 100;
+    const int NEAR_MARGIN_MM = 40;     // this much closer than the background
+    const int NEAR_ZONES = 10;         // of 64
+    const uint32_t CLEAR_HOLD_MS = 4000;
+    int16_t distBg[64];
+    bool distBgSet = false, handNear = false;
+
+    void captureDistBackground() {
+      dist.getDistanceGrid(distBg);
+      distBgSet = true;
+    }
+
+    bool somethingNear() {
+      int16_t grid[64];
+      dist.getDistanceGrid(grid);
+      int n = 0;
+      for (int z = 0; z < 64; z++) {
+        int16_t d = grid[z];
+        if (d <= 0 || d >= NEAR_MM) continue;
+        int16_t bg = distBg[z];
+        if (bg <= 0 || d < bg - NEAR_MARGIN_MM) n++;
+      }
+      return n >= NEAR_ZONES;
+    }
+
+    // One `dist_row` event per row: the USB serial buffer is 256 bytes, and a
+    // longer line, or lines sent back-to-back, lose bytes.
+    void emitDistGrid() {
+      int16_t grid[64];
+      dist.getDistanceGrid(grid);
+      for (int r = 0; r < 8; r++) {
+        char buf[240];
+        int n = snprintf(buf, sizeof(buf),
+                         "{\"type\":\"event\",\"payload\":{\"event_type\":\"sensor\",\"key\":\"dist_row\",\"value\":{\"row\":%d,\"now\":[", r);
+        for (int c = 0; c < 8; c++) n += snprintf(buf + n, sizeof(buf) - n, c ? ",%d" : "%d", grid[r * 8 + c]);
+        n += snprintf(buf + n, sizeof(buf) - n, "],\"bg\":[");
+        for (int c = 0; c < 8; c++) n += snprintf(buf + n, sizeof(buf) - n, c ? ",%d" : "%d", distBgSet ? distBg[r * 8 + c] : -1);
+        snprintf(buf + n, sizeof(buf) - n, "]}}}\n");
+        Serial.print(buf);
+        delay(5);  // let USB drain: back-to-back rows arrive cut and mixed (debug action only)
+      }
+    }
 
     // ---- What the agent tells us -------------------------------------------
     enum Level { LV_OK, LV_WATCH, LV_ALERT };
@@ -330,7 +376,14 @@ code:
     }
     if (atech_action == "tamper_arm") {
       armTamper();
+      if (dist_ok && dist.isReady()) captureDistBackground();
       postNow = true;
+      atechDone();
+    }
+    if (atech_action == "dist_grid") {
+      // 8 `dist_row` events: zones in mm, now and background: what the distance sensor sees
+      if (!dist_ok || !dist.isReady()) atechFail("distance sensor not ready");
+      else emitDistGrid();
       atechDone();
     }
     if (atech_action == "noise_cal") {
@@ -374,8 +427,8 @@ code:
       xSemaphoreGive(netLock);
       // Same reading over USB, for `atech monitor` while debugging
       Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"sensor\",\"key\":\"env\",\"value\":"
-                    "{\"temp\":%.2f,\"hum\":%.1f,\"db\":%.1f,\"db_max\":%.1f,\"moving\":%d,\"tampered\":%d,\"angle\":%.0f}}}\n",
-                    snap.temp, snap.hum, lastDb, lastPeak, moving ? 1 : 0, tilted ? 1 : 0, tiltFromBase);
+                    "{\"temp\":%.2f,\"hum\":%.1f,\"db\":%.1f,\"db_max\":%.1f,\"moving\":%d,\"tampered\":%d,\"angle\":%.0f,\"near\":%d}}}\n",
+                    snap.temp, snap.hum, lastDb, lastPeak, moving ? 1 : 0, tilted ? 1 : 0, tiltFromBase, handNear ? 1 : 0);
     }
 
     // ---- Tamper ----
@@ -413,12 +466,17 @@ code:
 
     // ---- Hands off ----
     if (distTimer.ready(50) && dist_ok && dist.isReady()) {
-      int md = dist.getMinDistance();  // 32767: nothing in range
-      if (!handNear && md > 0 && md < NEAR_MM) {
-        handNear = true;
-        snap.near = true;
-        postNow = true;  // let the agent know straight away
-      } else if (handNear && (md <= 0 || md > CLEAR_MM)) {
+      static uint32_t lastNear = 0;
+      // Background with the tamper baseline, once the device rests where it was put
+      if (!distBgSet && armed) captureDistBackground();
+      if (distBgSet && somethingNear()) {
+        lastNear = millis();
+        if (!handNear) {
+          handNear = true;
+          snap.near = true;
+          postNow = true;  // let the agent know straight away
+        }
+      } else if (handNear && millis() - lastNear >= CLEAR_HOLD_MS) {
         handNear = false;
         snap.near = false;
       }

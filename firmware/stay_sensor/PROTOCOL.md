@@ -21,7 +21,7 @@ Header `X-Device-Token: <token>` (the agent rejects other tokens when it has one
 | `db_max` | loudest 50 ms of those 5 s |
 | `moving` | 1 while the unit is being picked up, bumped or rotated |
 | `tampered` | 1 once it has been turned more than 20° from where it was placed, for 0.7 s; 0 again once it is back within 10° and still |
-| `near` | 1 while something is within 10 cm of the distance sensor (port 6); the screen then flashes DO NOT TOUCH |
+| `near` | 1 while something new is within 10 cm of the distance sensor (port 6, at least 10 of its 64 zones, closer than when the device was placed); the screen then flashes DO NOT TOUCH. Back to 0 after 4 s with nothing near |
 | `angle` | degrees away from the placed position |
 
 Posts every ~5 s, and at once when `tampered` changes or something comes within 10 cm. The microphone is only read as a
@@ -55,7 +55,8 @@ joining Wi-Fi, Wi-Fi not reachable, or the agent's HTTP error.
 | `net_set` | JSON, see above | stores Wi-Fi/server settings and reboots |
 | `net_status` | none | emits a `net` event: state, SSID, IP, server, last HTTP code, id |
 | `status_set` / `stay_set` | same JSON as the agent's answer | drives the screen by hand |
-| `tamper_arm` | none | takes the current position as "where it belongs" (otherwise set ~8 s after power-on, once still) |
+| `tamper_arm` | none | takes the current position as "where it belongs", and what the distance sensor sees as its background (otherwise both are set ~8 s after power-on, once still) |
+| `dist_grid` | none | emits 8 `dist_row` events: `{"row", "now": [8 mm], "bg": [8 mm]}`, what the distance sensor sees now and its background |
 | `noise_cal` | e.g. `125` | dB offset (default 120): raise it if the device reads lower than a phone dB meter |
 
 Over USB the device also prints an `env` event every 5 s with the same readings, for `atech monitor`.
