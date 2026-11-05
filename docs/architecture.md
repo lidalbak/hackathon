@@ -18,6 +18,8 @@ Protocol: [Hardware Buddy REFERENCE.md](https://github.com/anthropics/claude-des
 - **On screen:** agent "Claude", the session count as project, the prompt's tool and hint as the request.
 - **Light grid:** slot 8 (bottom right) shows the Claude app's state. Slots 0–7 are the bridge's.
 - **Limit:** the snapshot covers all Claude sessions together. It does not say which session or project a prompt comes from.
+- **Tested 5 Nov 2026:** the app reports `waiting: 1` with `msg: "(called Write)"` or `"(called Bash)"`, but includes `prompt` only some of the time (once for a Bash command, never for a file write). Without `prompt.id` the board cannot answer, so it shows "Answer in the Claude app". Approving Claude Code requests therefore goes through the bridge and the `PermissionRequest` hook instead; Bluetooth stays as the alert path.
+- **On a tie the bridge wins:** when both sources show the same state, the screen shows the bridge's session, since its requests are the ones the buttons can answer.
 - **Not done yet: encryption.** The link is unencrypted, so prompts and commands can be read by anyone in Bluetooth range. The protocol recommends LE Secure Connections bonding with a passkey shown on the device. Add it before using this outside a test.
 
 ## Agents through the bridge (USB)

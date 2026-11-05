@@ -8,6 +8,9 @@ dependencies = [
     "atech",
 ]
 
+[project.scripts]
+agent-controller = "agent_controller.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest"]
 

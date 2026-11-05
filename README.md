@@ -69,8 +69,8 @@ atech send show_session '{"agent": "Codex", "project": "demo", "state": "needs_i
 | Part | State |
 | --- | --- |
 | Firmware over USB | Flashed and working: screen, light grid, speaker and buttons respond to manual commands |
-| Claude app over Bluetooth | Built (v0.3), compiles. Not yet tested with the app. Link not encrypted yet |
-| Bridge | Session model, queue ranking and screen payload, tested. Hook listener and board driver not written |
+| Claude app over Bluetooth | Tested: shows Claude sessions and alerts when one waits. The app only sometimes sends an answerable prompt, so approving over Bluetooth is unreliable. Link not encrypted yet |
+| Bridge + Claude Code hooks | Built and tested end to end with a fake board. Approves any Claude Code permission request from the buttons. Not yet run on the Mac |
 | Codex integration | Researched: `PermissionRequest` hook waits for an answer. Not built |
 
 ### Flashing a prebuilt image

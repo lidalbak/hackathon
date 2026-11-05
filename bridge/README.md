@@ -1,26 +1,47 @@
 # Bridge
 
-Python program on the PC. It collects hook events from the agents, keeps one ranked session list, and drives the board over USB. Design: [docs/architecture.md](../docs/architecture.md).
+Python program on the PC. Agents' hooks report to it; it keeps one ranked session list, shows the top of the queue on the board, and answers permission requests with the board's buttons. Design: [docs/architecture.md](../docs/architecture.md).
 
-## Setup
+## Install and run
 
 ```bash
-cd bridge
-pip install -e ".[dev]"
-pytest
+pip install ./bridge            # or the .whl file
+agent-controller serve          # keeps the board's USB port: close `atech monitor` first
 ```
 
-## What is here
+Leave it running while you work. Ctrl+C stops it; agents then fall back to their own prompts.
 
-| File | State |
+## Connect Claude Code
+
+```bash
+agent-controller claude-settings
+```
+
+prints a `hooks` block. Merge it into `~/.claude/settings.json` (the Claude desktop app's Code tab reads the same file). Restart the Claude Code session afterwards.
+
+What the hooks do:
+
+| Hook | Effect on the board |
 | --- | --- |
-| `src/agent_controller/events.py` | Session model, colours per state, queue ranking, `screen_payload()` for the board's `show_session` action. Tested |
-| `tests/test_events.py` | Tests for ranking and the screen payload |
+| `PermissionRequest` | Screen shows the request, the board chirps. Left button allows, right button denies. No press within 60 s (`--wait`): Claude Code asks in the app as usual |
+| `UserPromptSubmit`, `PreToolUse`, `PostToolUse` | Working, with the prompt or the tool |
+| `Stop` | Done, your turn |
+| `SessionStart` / `SessionEnd` | Session added / removed |
 
-## Next to build
+The hook never breaks Claude Code: if the bridge is not running it exits at once with no output.
 
-1. **Board driver:** open the board with `atech.Board.connect()`, give each session a light-grid slot (0–8), and send `status_pixel` when a state changes. Send `show_session` with `screen_payload(top_of_queue, 1, len(queue))` whenever the top of the queue changes. Chirp with `speaker_play_rtttl` when something enters `needs_input`.
-2. **Hook listener:** a small local server, plus a command each agent's hook calls to forward its payload. Must exit cleanly when the bridge is not running.
-3. **Claude Code adapter:** map hook payloads to `AgentEvent`.
-4. **Codex adapter:** same for Codex.
-5. **Approve flow:** a `PermissionRequest` hook that waits for the bridge, which answers when `approve` or `deny` is pressed. On timeout or with no bridge, print nothing so the agent's own prompt takes over. Details in [docs/architecture.md](../docs/architecture.md#approving-from-the-device).
+## Files
+
+| File | What it does |
+| --- | --- |
+| `src/agent_controller/events.py` | Session model, colours, queue ranking, screen payload |
+| `src/agent_controller/controller.py` | Sessions, pending requests, what the board shows, button handling |
+| `src/agent_controller/server.py` | Local HTTP server on 127.0.0.1:8765 that the hooks call |
+| `src/agent_controller/claude.py` | Claude Code hook payloads → events, decisions → hook output, settings snippet |
+| `src/agent_controller/cli.py` | `agent-controller serve`, `hook claude`, `claude-settings` |
+| `tests/` | End to end with a fake board: hook → bridge → button → hook output |
+
+## Next
+
+- Codex adapter (`hook codex`), same bridge. Verify Codex's `PermissionRequest` output format first.
+- Encrypt the Bluetooth link to the Claude app.

@@ -87,7 +87,9 @@ code:
       return "IDLE";
     }
 
-    // The session on screen: the one that needs you most, then the latest change.
+    // The session on screen: the one that needs you most. On a tie the bridge (USB)
+    // wins: its requests are the ones the buttons can always answer, and it knows
+    // the project and the exact command.
     static ScreenSession* shown() {
       ScreenSession* a = g_claude.active ? &g_claude : nullptr;
       ScreenSession* b = g_usb.active ? &g_usb : nullptr;
@@ -95,7 +97,7 @@ code:
       if (!b) return a;
       int ra = stateRank(a->state), rb = stateRank(b->state);
       if (ra != rb) return ra < rb ? a : b;
-      return (int32_t)(a->changedAt - b->changedAt) >= 0 ? a : b;
+      return b;
     }
 
     // ================= small JSON readers (flat fields only) =================
