@@ -72,6 +72,7 @@ atech send show_session '{"agent": "Codex", "project": "demo", "state": "needs_i
 | Claude app over Bluetooth | Tested: shows Claude sessions and alerts when one waits. The app only sometimes sends an answerable prompt, so approving over Bluetooth is unreliable. Link not encrypted yet |
 | Bridge + Claude Code hooks | Built and tested end to end with a fake board. Approves any Claude Code permission request from the buttons. Not yet run on the Mac |
 | Knob | Built (firmware v0.8, bridge 0.0.2), tested with a fake board: turn to move through waiting requests, buttons answer the one shown |
+| Answering questions | Built (firmware v0.9, bridge 0.1.0), tested with a fake board and a fake transcriber: pick options with the knob, answer by voice (hold the knob, local Whisper), plain-text questions get an 8 s voice window |
 | Codex integration | Researched: `PermissionRequest` hook waits for an answer. Not built |
 
 ### Flashing a prebuilt image

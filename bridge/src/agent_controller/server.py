@@ -1,7 +1,9 @@
 """Local HTTP server the hooks talk to. Listens on 127.0.0.1 only.
 
-POST /event       {"agent","session_id","state","summary","project","ended"}  -> {"ok": true}
-POST /permission  {"agent","session_id","summary","project"}  -> {"decision": "allow"|"deny"|null}
+POST /event       {"agent","session_id","state","summary","project","ended"}   -> {"ok": true}
+POST /permission  {"agent","session_id","summary","project"}                   -> {"decision": "allow"|"deny"|null}
+POST /choice      {..., "questions": [...]}                                     -> {"answers": {question: answer}|null}
+POST /text        {..., "prompt": "..."}                                         -> {"text": "..."|null}
 GET  /health      -> {"ok": true, "sessions": [...]}
 """
 
@@ -9,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from agent_controller.controller import Controller
@@ -17,6 +20,14 @@ from agent_controller.events import Agent, AgentEvent, SessionState
 log = logging.getLogger(__name__)
 
 DEFAULT_PORT = 8765
+
+
+@dataclass
+class Waits:
+    permission: float = 60  # seconds to wait for a button on approve/deny
+    choice: float = 120  # seconds to pick options
+    text_window: float = 8  # seconds to start talking after a plain-text question
+    text_answer: float = 60  # seconds to finish the spoken answer once started
 
 
 def event_from_json(data: dict, state: SessionState | None = None) -> AgentEvent:
@@ -29,7 +40,9 @@ def event_from_json(data: dict, state: SessionState | None = None) -> AgentEvent
     )
 
 
-def make_server(controller: Controller, port: int = DEFAULT_PORT, wait_seconds: float = 60) -> ThreadingHTTPServer:
+def make_server(controller: Controller, port: int = DEFAULT_PORT, waits: Waits | None = None) -> ThreadingHTTPServer:
+    waits = waits or Waits()
+
     class Handler(BaseHTTPRequestHandler):
         def _reply(self, code: int, body: dict) -> None:
             data = json.dumps(body).encode()
@@ -54,11 +67,18 @@ def make_server(controller: Controller, port: int = DEFAULT_PORT, wait_seconds: 
                     self._reply(200, {"ok": True})
                 elif self.path == "/permission":
                     event = event_from_json(data, SessionState.NEEDS_INPUT)
-                    decision = controller.request_permission(event, wait_seconds)
-                    self._reply(200, {"decision": decision})
+                    self._reply(200, {"decision": controller.request_permission(event, waits.permission)})
+                elif self.path == "/choice":
+                    event = event_from_json(data, SessionState.NEEDS_INPUT)
+                    answers = controller.request_choice(event, list(data.get("questions") or []), waits.choice)
+                    self._reply(200, {"answers": answers})
+                elif self.path == "/text":
+                    event = event_from_json(data, SessionState.NEEDS_INPUT)
+                    text = controller.request_text(event, str(data.get("prompt", "")), waits.text_window, waits.text_answer)
+                    self._reply(200, {"text": text})
                 else:
                     self._reply(404, {"error": "not found"})
-            except (KeyError, ValueError) as exc:
+            except (KeyError, ValueError, TypeError) as exc:
                 self._reply(400, {"error": str(exc)})
 
         def log_message(self, fmt: str, *args) -> None:

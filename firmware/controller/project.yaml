@@ -16,7 +16,10 @@
 #      clear_session
 #      status_pixel / status_fill / status_clear  (light grid, slots 0-7)
 #      speaker_play_rtttl
-#    Events: approve / deny (1 = press, 0 = release), knob (position), knob_btn (press).
+#    Events: approve / deny (1 = press, 0 = release), knob (position), knob_btn (press),
+#            ptt (1 = knob held 0.4 s: talking, 0 = released), pcm (base64 16 kHz mono
+#            16-bit audio, 256 samples per event, only while talking).
+#    show_session also takes "hint": custom text for the bottom bar.
 #    The bridge uses the knob to move through the queue; the ring shows where you are.
 #
 # Light grid: slots 0-7 belong to the bridge, slot 8 (bottom right) shows the Claude app.
@@ -45,6 +48,7 @@ code:
     #include <BLEUtils.h>
     #include <BLE2902.h>
     #include "freertos/queue.h"
+    #include "mbedtls/base64.h"
 
     // ================= what the screen can show =================
     struct ScreenSession {
@@ -56,6 +60,7 @@ code:
       long pos = 0, total = 0;
       bool answerable = true;   // can the buttons answer it? (Claude app: only with a prompt id)
       bool focus = false;       // picked with the knob: wins over the Claude app
+      String hint;              // bottom bar text from the bridge (empty = default)
       uint32_t changedAt = 0;
     };
     static ScreenSession g_usb;      // from the bridge over USB
@@ -374,6 +379,48 @@ code:
       return true;
     }
 
+    // ================= push-to-talk: hold the knob, stream the microphone =================
+    // The capture task (core 0) copies every sample into a ring; loop sends it to USB
+    // as base64 "pcm" events. The bridge turns it into text with Whisper.
+    static const uint32_t AUDIO_RING = 16384;   // samples, about 1 s at 16 kHz
+    static int16_t g_audio[AUDIO_RING];
+    static volatile uint32_t g_audioHead = 0;   // written by the capture task
+    static uint32_t g_audioTail = 0;            // read by loop
+    static volatile bool g_capture = false;
+    static bool g_ptt = false;
+    static uint32_t g_knobDownAt = 0;
+
+    static void onMic(const int16_t* samples, int count, void*) {
+      if (!g_capture) return;
+      uint32_t h = g_audioHead;
+      for (int i = 0; i < count; i++) g_audio[(h + i) % AUDIO_RING] = samples[i];
+      g_audioHead = h + count;
+    }
+
+    static void sendEvent(const char* key, int value) {
+      Serial.printf("{\"type\":\"event\",\"payload\":{\"event_type\":\"button\",\"key\":\"%s\",\"value\":%d}}\n", key, value);
+    }
+
+    // Send up to 256 samples as one pcm event. Returns how many were sent.
+    static int sendAudioChunk() {
+      uint32_t head = g_audioHead;
+      uint32_t avail = head - g_audioTail;
+      if (avail > AUDIO_RING) { g_audioTail = head - AUDIO_RING; avail = AUDIO_RING; }  // overrun: drop the oldest
+      int n = avail < 256 ? (int)avail : 256;
+      if (n <= 0) return 0;
+      static int16_t chunk[256];
+      static unsigned char b64[704];
+      for (int i = 0; i < n; i++) chunk[i] = g_audio[(g_audioTail + i) % AUDIO_RING];
+      g_audioTail += n;
+      size_t olen = 0;
+      mbedtls_base64_encode(b64, sizeof(b64) - 1, &olen, (const unsigned char*)chunk, n * 2);
+      b64[olen] = 0;
+      Serial.print("{\"type\":\"event\",\"payload\":{\"event_type\":\"sensor\",\"key\":\"pcm\",\"value\":\"");
+      Serial.print((const char*)b64);
+      Serial.println("\"}}");
+      return n;
+    }
+
     // ================= drawing =================
     static void drawScreen() {
       screen.clear();
@@ -381,6 +428,23 @@ code:
       int16_t w = screen.width();
       const int16_t H = screen.height();
       ScreenSession* s = shown();
+
+      if (g_ptt) {
+        screen.fillRect(0, 0, w, 16, ATECH_ALERT);
+        screen.setTextColor(ATECH_BG);
+        screen.setCursor(4, 4);
+        screen.print("Listening");
+        screen.setTextSize(2);
+        screen.setTextColor(ATECH_ALERT);
+        screen.setCursor(4, 28);
+        screen.print("Speak now");
+        screen.setTextSize(1);
+        screen.setTextColor(ATECH_MUTED);
+        screen.setCursor(4, 60);
+        screen.print("Release the knob to stop");
+        screen.display();
+        return;
+      }
 
       if (!s) {
         int16_t top = atech::drawTitleBar(screen, "Agent Controller", nullptr, ATECH_PANEL, ATECH_FG);
@@ -419,12 +483,13 @@ code:
       screen.print(atech::fitText(screen, s->project, w - px - 4));
 
       int16_t hintH = 0;
-      if (s->state == "needs_input") {
+      if (s->hint.length() || s->state == "needs_input") {
         hintH = 14;
         screen.fillRect(0, H - hintH, w, hintH, ATECH_PANEL);
         screen.setTextColor(ATECH_FG);
         screen.setCursor(4, H - hintH + 3);
-        if (!s->answerable) screen.print("Answer in the Claude app");
+        if (s->hint.length()) screen.print(atech::fitText(screen, s->hint, w - 8));
+        else if (!s->answerable) screen.print("Answer in the Claude app");
         else if (s->total > 1) screen.print("L ok  R deny  Turn: next");
         else screen.print("L: approve   R: deny");
       }
@@ -442,7 +507,8 @@ code:
       ScreenSession* s = shown();
       if (s && s->state == "needs_input" && s->answerable) { approve.setColor(0, 255, 0); deny.setColor(255, 0, 0); }
       else { approve.off(); deny.off(); }
-      // Knob ring: the shown session's colour, at its place in the queue.
+      // Knob ring: red while talking; else the shown session's colour at its place in the queue.
+      if (g_ptt) { knob.enableRing(true); knob.setRingColor(255, 0, 0); knob.setRingPosition(0.0f); return; }
       if (!s) { knob.enableRing(false); return; }
       stateRgb(s->state, r, g, b);
       if (!r && !g && !b) { r = g = b = 40; }   // idle: dim white
@@ -456,6 +522,7 @@ code:
     bleSetup();
     knob.setAcceleration(false, 1);   // one step per detent: one request per click
     knob.enableRing(false);
+    mic.onAudio(onMic, nullptr);
 
   loop: |
     // ---- bytes from the Claude app -> lines ----
@@ -489,6 +556,7 @@ code:
       next.pos     = atechNum(atech_value, "pos", 0);
       next.total   = atechNum(atech_value, "total", 0);
       next.focus   = atechNum(atech_value, "focus", 0) == 1;
+      next.hint    = atechJsonString(atech_value, "hint");
       next.changedAt = millis();
       if (!next.agent.length() || !next.state.length()) {
         atechFail("show_session needs agent and state");
@@ -514,6 +582,31 @@ code:
       if (approvePressed) answerClaude(true);
       else if (denyPressed) answerClaude(false);
     }
+
+    // ---- push-to-talk: hold the knob for 0.4 s ----
+    bool held = knob.isPressed();
+    if (held && !g_ptt) {
+      if (!g_knobDownAt) g_knobDownAt = millis() | 1;
+      else if (millis() - g_knobDownAt > 400) {
+        speaker.playTone(880, 40);
+        g_audioTail = g_audioHead;
+        g_capture = true;
+        g_ptt = true;
+        sendEvent("ptt", 1);
+        g_redraw = true;
+      }
+    } else if (!held) {
+      g_knobDownAt = 0;
+      if (g_ptt) {
+        g_capture = false;
+        while (sendAudioChunk() > 0) {}
+        sendEvent("ptt", 0);
+        speaker.playTone(440, 60);
+        g_ptt = false;
+        g_redraw = true;
+      }
+    }
+    if (g_ptt) { for (int k = 0; k < 4 && sendAudioChunk() > 0; k++) {} }
 
     // ---- redraw only when something changed ----
     if (g_redraw) {

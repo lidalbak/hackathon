@@ -8,17 +8,32 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
+import time
+from pathlib import Path
 from typing import Optional
 
 from agent_controller.events import Agent, AgentEvent, SessionState
 
 PERMISSION = "PermissionRequest"
+STOP = "Stop"
+START = "SessionStart"
 ENDED = "SessionEnd"
+HOOK_MARK = "agent-controller hook claude"
 
-# Tools where "allow" is not an answer: Claude Code needs the user's choice in
+# Tools where "allow" alone is not an answer: Claude Code needs the user's choice in
 # updatedInput (https://code.claude.com/docs/en/hooks#allow-with-updatedinput).
-# The board shows them, but the answer is given in the app.
-ANSWER_IN_APP = {"AskUserQuestion"}
+CHOICE_TOOL = "AskUserQuestion"
+
+# Told to Claude at the start of every session, so its questions can be answered
+# from the controller (knob + voice) instead of only by typing.
+SESSION_CONTEXT = (
+    "The user may answer from a hardware controller with buttons, a knob and a microphone "
+    "instead of the keyboard. When you need a decision, a clarification or any other answer "
+    "from the user, ask with the AskUserQuestion tool and offer 2-4 short options, rather than "
+    "ending your turn with a question in plain text."
+)
 
 
 def describe_tool(tool: str, tool_input: dict) -> str:
@@ -30,7 +45,7 @@ def describe_tool(tool: str, tool_input: dict) -> str:
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         verb = "Write" if tool == "Write" else "Edit"
         return f"{verb}: {os.path.basename(str(path)) or path}"
-    if tool == "AskUserQuestion":
+    if tool == CHOICE_TOOL:
         questions = tool_input.get("questions") or [{}]
         return "Question: " + str(questions[0].get("question", ""))
     if tool == "ExitPlanMode":
@@ -59,15 +74,26 @@ def to_event(payload: dict) -> Optional[AgentEvent]:
     elif name == "UserPromptSubmit":
         prompt = str(payload.get("prompt") or "").strip().splitlines()
         state, summary = SessionState.WORKING, (prompt[0] if prompt else "Working")
-    elif name == "Stop":
-        state, summary = SessionState.DONE, "Finished, your turn"
-    elif name == "SessionStart":
+    elif name == STOP:
+        question = trailing_question(str(payload.get("last_assistant_message") or ""))
+        state, summary = SessionState.DONE, (question or "Finished, your turn")
+    elif name == START:
         state, summary = SessionState.IDLE, "Session started"
     elif name == ENDED:
         state, summary = SessionState.IDLE, ""
     else:
         return None
     return AgentEvent(Agent.CLAUDE_CODE, session_id, state, summary=summary, project=project)
+
+
+def trailing_question(message: str) -> str:
+    """The question Claude ended its turn with, or "" if it did not end with one."""
+    tail = message.strip()[-400:]
+    if "?" not in tail[-120:]:
+        return ""
+    sentences = re.split(r"(?<=[.!?])\s+", tail)
+    asked = [s for s in sentences if s.strip().endswith("?")]
+    return " ".join(asked[-1].split()) if asked else ""
 
 
 def decision_output(decision: Optional[str]) -> str:
@@ -80,8 +106,31 @@ def decision_output(decision: Optional[str]) -> str:
     return json.dumps({"hookSpecificOutput": {"hookEventName": PERMISSION, "decision": body}})
 
 
-def settings_snippet(command: str, wait_seconds: int) -> dict:
+def choice_output(tool_input: dict, answers: Optional[dict]) -> str:
+    """stdout for AskUserQuestion: allow, with the answers in updatedInput."""
+    if not answers:
+        return ""
+    updated = dict(tool_input or {})
+    updated["answers"] = answers
+    return json.dumps(
+        {"hookSpecificOutput": {"hookEventName": PERMISSION, "decision": {"behavior": "allow", "updatedInput": updated}}}
+    )
+
+
+def text_output(text: Optional[str]) -> str:
+    """stdout for a Stop hook: keep Claude going with the user's spoken answer."""
+    if not text:
+        return ""
+    return json.dumps({"decision": "block", "reason": f"The user answered by voice from the Agent Controller: {text}"})
+
+
+def session_start_output() -> str:
+    return json.dumps({"hookSpecificOutput": {"hookEventName": START, "additionalContext": SESSION_CONTEXT}})
+
+
+def settings_snippet(command: str, permission_wait: int, choice_wait: int, text_wait: int) -> dict:
     """The "hooks" block for ~/.claude/settings.json."""
+
     def entry(timeout: int, matcher: Optional[str] = None) -> list[dict]:
         group: dict = {"hooks": [{"type": "command", "command": f"{command} hook claude", "timeout": timeout}]}
         if matcher is not None:
@@ -90,12 +139,37 @@ def settings_snippet(command: str, wait_seconds: int) -> dict:
 
     return {
         "hooks": {
-            "PermissionRequest": entry(wait_seconds + 15, "*"),
+            "PermissionRequest": entry(max(permission_wait, choice_wait) + 15, "*"),
             "PreToolUse": entry(5, "*"),
             "PostToolUse": entry(5, "*"),
             "UserPromptSubmit": entry(5),
-            "Stop": entry(5),
+            "Stop": entry(text_wait + 15),
             "SessionStart": entry(5),
             "SessionEnd": entry(5),
         }
     }
+
+
+def install_hooks(settings_path: Path, snippet: dict) -> Path:
+    """Put our hooks into settings.json: keep everything else, replace only our own entries.
+
+    Writes a timestamped backup first and returns its path.
+    """
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = settings_path.with_name(f"{settings_path.name}.backup-{stamp}")
+    n = 1
+    while backup.exists():  # never overwrite an earlier backup
+        n += 1
+        backup = settings_path.with_name(f"{settings_path.name}.backup-{stamp}-{n}")
+    current: dict = {}
+    if settings_path.exists():
+        shutil.copy2(settings_path, backup)
+        text = settings_path.read_text().strip()
+        current = json.loads(text) if text else {}
+    hooks = current.setdefault("hooks", {})
+    for event, groups in snippet["hooks"].items():
+        kept = [g for g in hooks.get(event, []) if HOOK_MARK not in json.dumps(g)]
+        hooks[event] = kept + groups
+    settings_path.write_text(json.dumps(current, indent=2) + "\n")
+    return backup
