@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Messages - Airbnb</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/chat.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-belo" viewBox="0 0 32 32"><path d="M16 22.6c-2.5-2.8-4-5-4-7 0-2.3 1.8-3.9 4-3.9s4 1.6 4 3.9c0 2-1.5 4.2-4 7Zm0 0c-2.8 3.2-5 5.3-7.3 5.3-2.4 0-4.2-1.9-4.2-4.3 0-1 .3-2 .9-3.2L13.6 4.9c.6-1.2 1.4-1.9 2.4-1.9s1.8.7 2.4 1.9l8.2 15.5c.6 1.2.9 2.2.9 3.2 0 2.4-1.8 4.3-4.2 4.3-2.3 0-4.5-2.1-7.3-5.3Z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 32 32"><path d="M2 16h28M2 24h28M2 8h28"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13.5"/><path d="M2.5 16h27M16 2.5c-3.6 3.7-5.5 8.2-5.5 13.5s1.9 9.8 5.5 13.5M16 2.5c3.6 3.7 5.5 8.2 5.5 13.5S19.6 25.8 16 29.5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 32 32"><circle cx="13" cy="13" r="10"/><path d="m20.5 20.5 9 9"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 32 32"><path d="M2 9h14M26 9h4M2 23h4M16 23h14"/><circle cx="21" cy="9" r="4.5"/><circle cx="11" cy="23" r="4.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 32 32"><path d="m6 6 20 20M26 6 6 26"/></symbol>
+    <symbol id="i-back" viewBox="0 0 32 32"><path d="M20 28 8.7 16.7a1 1 0 0 1 0-1.4L20 4"/></symbol>
+    <symbol id="i-up" viewBox="0 0 32 32"><path d="M16 28V5M6 14l10-10 10 10"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 32 32"><path d="M16 3v26M3 16h26"/></symbol>
+  </svg>
+
+  <header class="top">
+    <a class="logo" href="/" aria-label="Home"><svg><use href="#i-belo"/></svg><span class="wordmark">airbnb</span></a>
+    <nav class="host-nav" aria-label="Hosting">
+      <a href="#">Today</a><a href="#">Calendar</a><a href="#">Listings</a><a class="active" href="#">Messages</a>
+    </nav>
+    <div class="top-right">
+      <a class="switch" id="switch" href="/hosting/messages">Switch to hosting</a>
+      <button class="icon-btn" aria-label="Choose a language"><svg class="icon" style="stroke-width:2"><use href="#i-globe"/></svg></button>
+      <button class="profile" aria-label="Main navigation menu"><svg class="icon"><use href="#i-menu"/></svg><span class="avatar s32" id="me-avatar">A</span></button>
+    </div>
+  </header>
+
+  <main class="inbox">
+    <section class="list-pane" aria-label="Conversations">
+      <div class="list-head">
+        <h1>Messages</h1>
+        <div class="list-actions">
+          <button class="icon-btn" id="search-toggle" aria-label="Search messages"><svg class="icon"><use href="#i-search"/></svg></button>
+          <button class="icon-btn" aria-label="Settings"><svg class="icon"><use href="#i-sliders"/></svg></button>
+        </div>
+      </div>
+      <div class="search-row" id="search-row" hidden><input id="search" type="search" placeholder="Search all messages" autocomplete="off"></div>
+      <div class="chips" id="chips" role="tablist"></div>
+      <ul class="threads" id="threads"></ul>
+    </section>
+
+    <section class="thread-pane" aria-label="Conversation">
+      <div class="thread-head" id="thread-head" hidden>
+        <button class="back" id="back" aria-label="Back"><svg class="icon"><use href="#i-back"/></svg></button>
+        <div class="thread-title"><h2 id="thread-name"></h2><p id="thread-sub"></p></div>
+        <button class="pill-btn" id="details-toggle">Show details</button>
+      </div>
+      <div class="scroller" id="scroller"><div class="messages" id="messages"></div></div>
+      <div class="thread-empty" id="thread-empty">Select a conversation to read messages.</div>
+      <form class="composer" id="composer" hidden>
+        <div class="compose-box">
+          <button type="button" class="attach" aria-label="Add photo"><svg class="icon"><use href="#i-plus"/></svg></button>
+          <textarea id="input" rows="1" placeholder="Write a message…" aria-label="Write a message"></textarea>
+          <button class="send" id="send" aria-label="Send" disabled><svg class="icon"><use href="#i-up"/></svg></button>
+        </div>
+        <div class="compose-error" id="compose-error" hidden></div>
+      </form>
+    </section>
+
+    <aside class="details-pane" id="details" aria-label="Reservation details"></aside>
+  </main>
+  <script src="/static/chat.js"></script>
+</body>
+</html>
