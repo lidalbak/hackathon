@@ -1,97 +1,98 @@
-# Agent Controller
+# Stay Sensor
 
-A physical controller that sits next to your keyboard and shows what every AI coding agent is doing, so you can keep working on your PC without switching into the agent's window or terminal.
+**Your rental, watched while you're away.** A small sensor in the apartment plus an AI
+agent that protects Airbnb hosts from noise, parties and guests who don't follow the
+house rules, without the host having to watch or write a single message.
 
-- **See status at a glance.** One light per session: working, done, or red because it needs you.
-- **Answer without switching windows.** Approve or deny from buttons on the device, after reading what the agent wants on its screen.
-- **One device for every agent.** Claude Code and Codex first, more later.
+- **The sensor** sits in the living room and measures sound level (decibels only, no
+  audio is recorded), temperature and humidity. It notices when it is moved, and
+  flashes DO NOT TOUCH when a hand comes close.
+- **The agent** reads the sensor, compares it with the booking and the house rules,
+  and acts as the host in the Airbnb chat: a polite note to the guest the first time,
+  a final warning and an alert to the host the second time. It also answers whatever
+  the guest writes, as the host.
+- **After checkout** it orders cleaning and writes the host a stay report and a draft
+  review of the guest.
 
-The first prototype is built on the [Atech](https://atech.dev) modular ESP32-S3 kit.
-
-## Why this, and not what already exists
-
-OpenAI's Codex Micro (USD 230) is a desk controller for Codex only. Anthropic's Hardware Buddy API and Atech's own Clawd demo cover Claude only. Status lights such as LumoCue and Signal One support several agents but only show colours. No physical controller we found covers several agents **and** lets you act. That gap is the product. Details in [docs/idea.md](docs/idea.md).
-
-What has to set it apart:
-
-1. **Priority, not just lights:** a queue of what needs you first, across agents.
-2. **Safe approval:** the screen shows what will be approved and how risky it is. Risky requests are sent back to the PC.
-3. **One press to the right session** when you need to look yourself.
+Built at a hackathon on the [Atech](https://atech.dev) modular ESP32-S3 kit. The pitch
+is in [docs/Presentation.pptx](docs/Presentation.pptx).
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    CA[Claude app<br/>Claude Code + Cowork] -- "Bluetooth: sessions, prompt" --> FW
-    FW -- "approve / deny" --> CA
-    CX[Codex] -- hooks --> BR
-    BR[PC bridge<br/>bridge/] -- "USB serial, JSON lines" --> FW[Atech board<br/>firmware/controller]
-    FW -- "button presses" --> BR
-    BR -- "approve / deny" --> CX
+    B[Stay sensor<br/>firmware/stay_sensor] -- "readings every 5 s<br/>USB (demo) or Wi-Fi" --> A[Agent<br/>stay_agent/]
+    A -- "what to show" --> B
+    A <-- "bookings, guest chat" --> R[Airbnb copy<br/>airbnb_chat/]
+    A -- "writes messages" --> C[Claude<br/>via Pydantic AI]
+    A -- "alerts, cleaning, report" --> H[Host]
 ```
 
-Two paths into the same device. The **Claude desktop app** talks to the board directly over Bluetooth, using Anthropic's Hardware Buddy protocol. **Other agents** such as Codex report through their hooks to the bridge, which drives the board over USB. The screen always shows the session that needs you most. Neither path goes through a cloud service. Full design and message protocol in [docs/architecture.md](docs/architecture.md).
+**Code decides, Claude writes.** Whether a reading is a problem, when to warn, and when
+to call the host are fixed rules in code. Claude only writes the words: warnings,
+replies to the guest, the host's alerts, the report and the review. If Claude can't be
+reached, a template message goes out instead.
 
-## Repository layout
+Airbnb only lets approved partners send guest messages through its API, so the demo
+uses [`airbnb_chat/`](airbnb_chat), a lookalike of the Airbnb inbox with an API the
+agent reads and writes.
 
-| Path | What it is |
-| --- | --- |
-| [`firmware/controller/`](firmware/controller) | Atech project for the board: modules and ports in `project.yaml` |
-| [`bridge/`](bridge) | Python program on the PC: collects agent events, drives the board |
-| [`docs/idea.md`](docs/idea.md) | Problem, target users, competitors, positioning |
-| [`docs/hardware.md`](docs/hardware.md) | Kit, modules, port layout, open questions |
-| [`docs/architecture.md`](docs/architecture.md) | Data flow, session states, board protocol |
-| [`airbnb_chat/`](airbnb_chat) | Separate demo: Airbnb-style chat with a read/write API. Docs in [`docs/airbnb-chat.md`](docs/airbnb-chat.md) |
-| [`room/`](room) | Separate prototype: Room, answers questions from a meeting while it runs (Norwegian). See [`room/README.md`](room/README.md) |
-| [`firmware/stay_sensor/`](firmware/stay_sensor) | Airbnb stay sensor: noise, temperature, humidity and tamper over Wi-Fi ([protocol](firmware/stay_sensor/PROTOCOL.md)) |
-| [`stay_agent/`](stay_agent) | Agent for the stay sensor: rules, guest and owner messages, reports, written by Claude through Pydantic AI |
+## Run the demo
 
-## Getting started
-
-Needs Python 3.10+, a USB-C **data** cable and the board.
+Needs Python 3.10+, the board on a USB-C **data** cable, and a Claude API key.
 
 ```bash
+# 1. The Airbnb copy: http://127.0.0.1:8766/hosting/messages
+pip install -r airbnb_chat/requirements.txt
+python -m airbnb_chat
+
+# 2. Make Simen the host of Emma's stay at "Cozy loft near Bryggen" (local data only)
+curl -X PATCH localhost:8766/api/conversations/1 -H 'Content-Type: application/json' -d '{"host": {"name": "Simen"}}'
+
+# 3. Flash the sensor (the first build downloads the ESP32 compiler, about 2.4 GB)
 pip install atech
+atech upload firmware/stay_sensor
 
-# 1. Check the planned layout against the board in your hand
-atech view firmware/controller        # opens the board in 3D in your browser
-
-# 2. Flash it (the first build downloads the ESP32 compiler, about 2.4 GB, once)
-atech validate firmware/controller
-atech upload firmware/controller
-atech check                            # which modules answered
-
-# 3. Talk to it by hand before the bridge exists
-atech monitor                          # press approve/deny, watch the events
-atech send status_pixel '{"index": 0, "r": 255, "g": 0, "b": 0}'
-atech send speaker_play_rtttl "chirp:d=16,o=6,b=180:c,e,g"
-atech send show_session '{"agent": "Codex", "project": "demo", "state": "needs_input", "summary": "Run: npm test", "pos": 1, "total": 2}'
+# 4. The agent, talking to the board over USB
+pip install -e "./stay_agent[device]"
+cd stay_agent && cp .env.example .env      # put your Claude API key in .env (git-ignored)
+stay-agent serve --config config.demo.json --usb
 ```
+
+The board shows "Welcome Emma! All good." Then:
+
+- **Noise above 90 dB for 3 s:** Simen sends Emma a friendly note, and the board turns amber.
+- **A second time:** a final warning to Emma, an alert to the host, and the board pulses red.
+- **Emma writes in the chat:** Simen answers within seconds, from the booking, the house
+  rules and the apartment facts in `config.demo.json` (placeholders: replace them).
+- **Move the sensor or reach for it:** MOVED or DO NOT TOUCH on the screen at once.
+
+Without the board: `stay-agent simulate party --config config.demo.json` plays a whole
+night into the Airbnb copy in seconds.
 
 ## Status
 
 | Part | State |
 | --- | --- |
-| Firmware over USB | Flashed and working: screen, light grid, speaker and buttons respond to manual commands |
-| Claude app over Bluetooth | Tested: shows Claude sessions and alerts when one waits. The app only sometimes sends an answerable prompt, so approving over Bluetooth is unreliable. Link not encrypted yet |
-| Bridge + Claude Code hooks | Built and tested end to end with a fake board. Approves any Claude Code permission request from the buttons. Not yet run on the Mac |
-| Knob | Built (firmware v0.8, bridge 0.0.2), tested with a fake board: turn to move through waiting requests, buttons answer the one shown |
-| Answering questions | Built (firmware v0.9, bridge 0.1.0), tested with a fake board and a fake transcriber: pick options with the knob, answer by voice (hold the knob, local Whisper), plain-text questions get an 8 s voice window |
-| Codex integration | Researched: `PermissionRequest` hook waits for an answer. Not built |
+| Sensor over USB | Working: noise, temperature, humidity, tamper, DO NOT TOUCH |
+| Agent | Working with Claude: warnings, escalation on the second one, answers to the guest, owner alerts, report and review draft. 16 tests |
+| Airbnb copy | Working: the agent reads stays and writes as the host |
+| Sensor over Wi-Fi | Built (the sensor posts to the agent, so it also works with the agent in the cloud), not working on a real network yet: the venue's guest Wi-Fi blocks devices from reaching each other |
+| CO₂ (people count) and smoke | In the pitch, not in the hardware: the kit we had has no CO₂ or smoke sensor |
+| Real Airbnb | Needs Airbnb partner access, or a property-management tool that has it |
 
-### Flashing a prebuilt image
+## Repository layout
 
-`atech upload` builds from source and downloads the ESP32 compiler (2.4 GB) the first time. To flash a prebuilt image instead:
+| Path | What it is |
+| --- | --- |
+| [`firmware/stay_sensor/`](firmware/stay_sensor) | The sensor: Atech project and [its interface](firmware/stay_sensor/PROTOCOL.md) |
+| [`stay_agent/`](stay_agent) | The agent: rules, Claude via Pydantic AI, USB and Wi-Fi, simulator. [README](stay_agent/README.md) |
+| [`airbnb_chat/`](airbnb_chat) | The Airbnb copy: host and guest inbox with an API. [Docs](docs/airbnb-chat.md) |
+| [`docs/Presentation.pptx`](docs/Presentation.pptx) | The pitch |
 
-```bash
-pip install esptool
-esptool --chip esp32s3 --before default-reset --after hard-reset write-flash 0x0 agent-controller-v0.3.bin
-```
+Earlier ideas from the same hackathon, kept for reference:
 
-### Connecting the Claude app
-
-1. Claude app: **Help → Troubleshooting → Enable Developer Mode**.
-2. **Developer → Open Hardware Buddy…** → **Connect** → pick `Claude-AC…`. Allow Bluetooth when macOS asks.
-3. The idle screen says "Claude app: connected". When a Claude Code or Cowork session asks for permission, the screen shows it: left button approves, right button denies.
-
-Open questions are tracked in [docs/hardware.md](docs/hardware.md#open-questions).
+| Path | What it is |
+| --- | --- |
+| [`firmware/controller/`](firmware/controller), [`bridge/`](bridge) | Agent Controller: a desk device to watch and approve AI coding agents. [Idea](docs/idea.md), [architecture](docs/architecture.md), [hardware](docs/hardware.md) |
+| [`room/`](room) | Room: answers questions from a meeting while it runs (Norwegian). [README](room/README.md) |
